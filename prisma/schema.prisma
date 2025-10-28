@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ActiveIngredient {
+  id                          String                     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name                        String                     @unique @db.VarChar(500)
+  nameLatin                   String?                    @db.VarChar(500)
+  nameUzbek                   String?                    @db.VarChar(500)
+  atcCode                     String?                    @db.VarChar(20)
+  therapeuticClass            String?                    @db.VarChar(500)
+  description                 String?
+  warnings                    String?
+  isNarrowTherapeuticIndex    Boolean?                   @default(false)
+  createdAt                   DateTime?                  @default(now()) @db.Timestamp(6)
+  updatedAt                   DateTime?                  @default(now()) @db.Timestamp(6)
+  equivalence_groups          EquivalenceGroup[]
+  medicine_active_ingredients MedicineActiveIngredient[]
+
+  @@index([atcCode], map: "idx_active_ingredients_atc")
+  @@index([name], map: "idx_active_ingredients_name")
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "idx_active_ingredients_name_trgm", type: Gin)
+  @@map("active_ingredients")
+}
+
+model Manufacturer {
+  id                String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name              String     @unique(map: "manufacturers_name_unique") @db.VarChar(500)
+  country           String?    @db.VarChar(200)
+  isLocal           Boolean?   @default(false)
+  reliabilityRating Decimal?   @db.Decimal(3, 2)
+  createdAt         DateTime?  @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime?  @default(now()) @db.Timestamp(6)
+  medicines         Medicine[]
+
+  @@map("manufacturers")
+}
+
+model DosageForm {
+  id          String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String     @unique @db.VarChar(500)
+  nameUzbek   String?    @db.VarChar(500)
+  description String?
+  createdAt   DateTime?  @default(now()) @db.Timestamp(6)
+  medicines   Medicine[]
+
+  @@map("dosage_forms")
+}
+
+model Medicine {
+  id                          String                     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tradeName                   String                     @db.VarChar(500)
+  registrationNumber          String?                    @unique(map: "medicines_registrationnumber_key") @db.VarChar(200)
+  manufacturerId              String?                    @db.Uuid
+  dosageFormId                String?                    @db.Uuid
+  strength                    String?                    @db.VarChar(200)
+  strengthNumeric             Decimal?                   @db.Decimal(10, 4)
+  strengthUnit                String?                    @db.VarChar(50)
+  packageSize                 String?                    @db.VarChar(200)
+  packageQuantity             Int?
+  priceUzs                    Decimal?                   @db.Decimal(12, 2)
+  priceLastUpdated            DateTime?                  @db.Timestamp(6)
+  prescriptionRequired        Boolean?                   @default(true)
+  isGeneric                   Boolean?                   @default(false)
+  isAvailable                 Boolean?                   @default(true)
+  barcode                     String?                    @db.VarChar(100)
+  registrationDate            DateTime?                  @db.Date
+  expiryDate                  DateTime?                  @db.Date
+  createdAt                   DateTime?                  @default(now()) @db.Timestamp(6)
+  updatedAt                   DateTime?                  @default(now()) @db.Timestamp(6)
+  medicine_active_ingredients MedicineActiveIngredient[]
+  medicine_equivalence        MedicineEquivalence[]
+  medicine_prices             MedicinePrice[]
+  dosage_forms                DosageForm?                @relation(fields: [dosageFormId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "medicines_dosageformid_fkey")
+  manufacturers               Manufacturer?              @relation(fields: [manufacturerId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "medicines_manufacturerid_fkey")
+  user_searches               UserSearch[]
+
+  @@index([isAvailable], map: "idx_medicines_available")
+  @@index([dosageFormId], map: "idx_medicines_dosage_form")
+  @@index([manufacturerId], map: "idx_medicines_manufacturer")
+  @@index([priceUzs], map: "idx_medicines_price")
+  @@index([strengthNumeric, strengthUnit], map: "idx_medicines_strength")
+  @@index([tradeName], map: "idx_medicines_trade_name")
+  @@index([tradeName(ops: raw("gin_trgm_ops"))], map: "idx_medicines_trade_name_trgm", type: Gin)
+  @@map("medicines")
+}
+
+model MedicineActiveIngredient {
+  id                 String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  medicineId         String?           @db.Uuid
+  activeIngredientId String?           @db.Uuid
+  quantity           Decimal?          @db.Decimal(10, 4)
+  quantityUnit       String?           @db.VarChar(50)
+  isPrimary          Boolean?          @default(true)
+  createdAt          DateTime?         @default(now()) @db.Timestamp(6)
+  active_ingredients ActiveIngredient? @relation(fields: [activeIngredientId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "medicine_active_ingredients_activeingredientid_fkey")
+  medicines          Medicine?         @relation(fields: [medicineId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "medicine_active_ingredients_medicineid_fkey")
+
+  @@unique([medicineId, activeIngredientId], map: "medicine_active_ingredients_medicineid_activeingredientid_key")
+  @@index([activeIngredientId], map: "idx_med_active_ingredient")
+  @@index([medicineId], map: "idx_med_active_medicine")
+  @@map("medicine_active_ingredients")
+}
+
+model Pharmacy {
+  id              String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name            String          @db.VarChar(255)
+  chainName       String?         @db.VarChar(255)
+  address         String?
+  city            String?         @db.VarChar(100)
+  region          String?         @db.VarChar(100)
+  phone           String?         @db.VarChar(50)
+  latitude        Decimal?        @db.Decimal(10, 8)
+  longitude       Decimal?        @db.Decimal(11, 8)
+  isActive        Boolean?        @default(true)
+  createdAt       DateTime?       @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime?       @default(now()) @db.Timestamp(6)
+  medicine_prices MedicinePrice[]
+
+  @@map("pharmacies")
+}
+
+model MedicinePrice {
+  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  medicineId    String?   @db.Uuid
+  pharmacyId    String?   @db.Uuid
+  priceUzs      Decimal   @db.Decimal(12, 2)
+  isAvailable   Boolean?  @default(true)
+  stockQuantity Int?
+  lastVerified  DateTime? @default(now()) @db.Timestamp(6)
+  createdAt     DateTime? @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime? @default(now()) @db.Timestamp(6)
+  medicines     Medicine? @relation(fields: [medicineId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "medicine_prices_medicineid_fkey")
+  pharmacies    Pharmacy? @relation(fields: [pharmacyId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "medicine_prices_pharmacyid_fkey")
+
+  @@unique([medicineId, pharmacyId], map: "medicine_prices_medicineid_pharmacyid_key")
+  @@index([priceUzs], map: "idx_prices_amount")
+  @@index([medicineId], map: "idx_prices_medicine")
+  @@index([pharmacyId], map: "idx_prices_pharmacy")
+  @@map("medicine_prices")
+}
+
+model UserSearch {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  searchQuery  String    @db.VarChar(500)
+  medicineId   String?   @db.Uuid
+  userIp       String?   @db.VarChar(45)
+  userAgent    String?
+  resultsCount Int?
+  createdAt    DateTime? @default(now()) @db.Timestamp(6)
+  medicines    Medicine? @relation(fields: [medicineId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_searches_medicineid_fkey")
+
+  @@index([createdAt], map: "idx_searches_created")
+  @@index([medicineId], map: "idx_searches_medicine")
+  @@map("user_searches")
+}
+
+model EquivalenceGroup {
+  id                   String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name                 String                @db.VarChar(255)
+  activeIngredientId   String?               @db.Uuid
+  description          String?
+  bioequivalenceNote   String?
+  createdAt            DateTime?             @default(now()) @db.Timestamp(6)
+  active_ingredients   ActiveIngredient?     @relation(fields: [activeIngredientId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "equivalence_groups_activeingredientid_fkey")
+  medicine_equivalence MedicineEquivalence[]
+
+  @@map("equivalence_groups")
+}
+
+model MedicineEquivalence {
+  equivalenceGroupId String           @db.Uuid
+  medicineId         String           @db.Uuid
+  equivalenceRating  String?          @db.VarChar(20)
+  createdAt          DateTime?        @default(now()) @db.Timestamp(6)
+  equivalence_groups EquivalenceGroup @relation(fields: [equivalenceGroupId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "medicine_equivalence_equivalencegroupid_fkey")
+  medicines          Medicine         @relation(fields: [medicineId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "medicine_equivalence_medicineid_fkey")
+
+  @@id([equivalenceGroupId, medicineId])
+  @@map("medicine_equivalence")
+}
