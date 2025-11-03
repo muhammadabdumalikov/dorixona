@@ -38,7 +38,7 @@ export class AlternativesService {
         throw new NotFoundException(`Medicine with ID ${medicineId} not found`);
       }
 
-      if (!sourceMedicine.isAvailable) {
+      if (!sourceMedicine.is_available) {
         throw new NotFoundException(
           `Medicine with ID ${medicineId} is not available`,
         );
@@ -47,7 +47,7 @@ export class AlternativesService {
       // Get active ingredient IDs
       const activeIngredientIds =
         sourceMedicine.medicine_active_ingredients.map(
-          (mai) => mai.activeIngredientId,
+          (mai) => mai.active_ingredient_id,
         );
 
       if (activeIngredientIds.length === 0) {
@@ -59,91 +59,91 @@ export class AlternativesService {
         WITH medicine_ingredients AS (
           SELECT 
             m.id,
-            m."tradeName",
+            m."trade_name",
             m.strength,
-            m."strengthNumeric",
-            m."strengthUnit",
-            m."packageSize",
-            m."priceUzs",
-            m."isGeneric",
-            m."prescriptionRequired",
+            m."strength_numeric",
+            m."strength_unit",
+            m."package_size",
+            m."price_uzs",
+            m."is_generic",
+            m."prescription_required",
             df.name as dosage_form,
             mf.name as manufacturer,
             mf.country as manufacturer_country,
             array_agg(ai.id) as active_ingredient_ids,
             array_agg(ai.name) as active_ingredient_names,
-            array_agg(ai."isNarrowTherapeuticIndex") as narrow_therapeutic_flags
+            array_agg(ai."is_narrow_therapeutic_index") as narrow_therapeutic_flags
           FROM medicines m
-          LEFT JOIN dosage_forms df ON m."dosageFormId" = df.id
-          LEFT JOIN manufacturers mf ON m."manufacturerId" = mf.id
-          LEFT JOIN medicine_active_ingredients mai ON m.id = mai."medicineId"
-          LEFT JOIN active_ingredients ai ON mai."activeIngredientId" = ai.id
-          WHERE m."isAvailable" = true
+          LEFT JOIN dosage_forms df ON m."dosage_form_id" = df.id
+          LEFT JOIN manufacturers mf ON m."manufacturer_id" = mf.id
+          LEFT JOIN medicine_active_ingredients mai ON m.id = mai."medicine_id"
+          LEFT JOIN active_ingredients ai ON mai."active_ingredient_id" = ai.id
+          WHERE m."is_available" = true
             AND m.id != ${medicineId}::uuid
-          GROUP BY m.id, m."tradeName", m.strength, m."strengthNumeric", m."strengthUnit", m."packageSize", m."priceUzs", m."isGeneric", m."prescriptionRequired", df.name, mf.name, mf.country
+          GROUP BY m.id, m."trade_name", m.strength, m."strength_numeric", m."strength_unit", m."package_size", m."price_uzs", m."is_generic", m."prescription_required", df.name, mf.name, mf.country
         )
         SELECT 
           mi.id,
-          mi."tradeName",
+          mi."trade_name",
           mi.strength,
-          mi."packageSize",
-          mi."priceUzs",
-          mi."isGeneric",
-          mi."prescriptionRequired",
-          mi.dosage_form as "dosageForm",
+          mi."package_size",
+          mi."price_uzs",
+          mi."is_generic",
+          mi."prescription_required",
+          mi.dosage_form as "dosage_form",
           mi.manufacturer,
-          mi.manufacturer_country as "manufacturerCountry",
-          mi.active_ingredient_names as "activeIngredients",
+          mi.manufacturer_country as "manufacturer_country",
+          mi.active_ingredient_names as "active_ingredients",
           CASE 
-            WHEN ${sourceMedicine.priceUzs} IS NOT NULL AND mi."priceUzs" IS NOT NULL 
-            THEN ${sourceMedicine.priceUzs} - mi."priceUzs" 
+            WHEN ${sourceMedicine.price_uzs}::decimal IS NOT NULL AND mi."price_uzs" IS NOT NULL 
+            THEN ${sourceMedicine.price_uzs}::decimal - mi."price_uzs" 
             ELSE NULL 
           END as savings,
           CASE 
-            WHEN ${sourceMedicine.priceUzs} IS NOT NULL AND mi."priceUzs" IS NOT NULL AND ${sourceMedicine.priceUzs} > 0
-            THEN ROUND((((${sourceMedicine.priceUzs} - mi."priceUzs") / ${sourceMedicine.priceUzs}) * 100), 2)
+            WHEN ${sourceMedicine.price_uzs}::decimal IS NOT NULL AND mi."price_uzs" IS NOT NULL AND ${sourceMedicine.price_uzs}::decimal > 0
+            THEN ROUND((((${sourceMedicine.price_uzs}::decimal - mi."price_uzs") / ${sourceMedicine.price_uzs}::decimal) * 100), 2)
             ELSE NULL 
-          END as "savingsPercentage",
+          END as "savings_percentage",
           CASE 
-            WHEN array_length(mi.active_ingredient_ids, 1) = ${activeIngredientIds.length}
+            WHEN array_length(mi.active_ingredient_ids, 1) = ${activeIngredientIds.length}::int
               AND mi.active_ingredient_ids @> ${activeIngredientIds}::uuid[]
               AND mi.active_ingredient_ids <@ ${activeIngredientIds}::uuid[]
             THEN true
             ELSE false
-          END as "exactMatch",
+          END as "exact_match",
           CASE 
-            WHEN mi.dosage_form = ${sourceMedicine.dosage_forms.name}
+            WHEN mi.dosage_form = ${sourceMedicine.dosage_forms.name}::text
             THEN true
             ELSE false
-          END as "sameDosageForm",
+          END as "same_dosage_form",
           CASE 
-            WHEN mi."strengthNumeric" = ${sourceMedicine.strengthNumeric}
-              AND mi."strengthUnit" = ${sourceMedicine.strengthUnit}
+            WHEN mi."strength_numeric" = ${sourceMedicine.strength_numeric}::decimal
+              AND mi."strength_unit" = ${sourceMedicine.strength_unit}::text
             THEN true
             ELSE false
-          END as "sameStrength",
+          END as "same_strength",
           CASE 
             WHEN true = ANY(mi.narrow_therapeutic_flags)
             THEN true
             ELSE false
-          END as "hasNarrowTherapeuticIndex"
+          END as "has_narrow_therapeutic_index"
         FROM medicine_ingredients mi
-        WHERE array_length(mi.active_ingredient_ids, 1) = ${activeIngredientIds.length}
+        WHERE array_length(mi.active_ingredient_ids, 1) = ${activeIngredientIds.length}::int
           AND mi.active_ingredient_ids @> ${activeIngredientIds}::uuid[]
           AND mi.active_ingredient_ids <@ ${activeIngredientIds}::uuid[]
         ORDER BY 
-          "exactMatch" DESC,
-          "sameDosageForm" DESC,
-          "sameStrength" DESC,
-          mi."priceUzs" ASC NULLS LAST,
-          mi."tradeName" ASC
+          "exact_match" DESC,
+          "same_dosage_form" DESC,
+          "same_strength" DESC,
+          mi."price_uzs" ASC NULLS LAST,
+          mi."trade_name" ASC
       `;
 
       // Add disclaimer and warnings
       const alternativesWithDisclaimer = alternatives.map((alt) => ({
         ...alt,
         disclaimer: StrengthParser.getDisclaimer(),
-        warnings: alt.hasNarrowTherapeuticIndex
+        warnings: alt.has_narrow_therapeutic_index
           ? 'This medicine contains narrow therapeutic index ingredients. Consult your doctor before switching.'
           : null,
       }));
@@ -166,8 +166,8 @@ export class AlternativesService {
 
     // Filter and sort by price
     const cheapestAlternatives = alternatives
-      .filter((alt) => alt.priceUzs !== null)
-      .sort((a, b) => (a.priceUzs || 0) - (b.priceUzs || 0))
+      .filter((alt) => alt.price_uzs !== null)
+      .sort((a, b) => (a.price_uzs || 0) - (b.price_uzs || 0))
       .slice(0, limit);
 
     return cheapestAlternatives;

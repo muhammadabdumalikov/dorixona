@@ -19,36 +19,36 @@ export class SearchService {
       const medicines = await this.prisma.$queryRaw<MedicineResponseDto[]>`
         SELECT DISTINCT
           m.id,
-          m."tradeName",
-          m."registrationNumber",
+          m."trade_name",
+          m."registration_number",
           m.strength,
-          m."packageSize",
-          m."priceUzs",
-          m."isGeneric",
-          m."isAvailable",
-          m."prescriptionRequired",
-          df.name as "dosageForm",
+          m."package_size",
+          m."price_uzs",
+          m."is_generic",
+          m."is_available",
+          m."prescription_required",
+          df.name as "dosage_form",
           mf.name as "manufacturer",
-          mf.country as "manufacturerCountry",
-          array_agg(DISTINCT ai.name) as "activeIngredients",
+          mf.country as "manufacturer_country",
+          array_agg(DISTINCT ai.name) as "active_ingredients",
           GREATEST(
-            similarity(m."tradeName", ${query}),
+            similarity(m."trade_name", ${query}),
             similarity(ai.name, ${query})
           ) as similarity_score
         FROM medicines m
-        LEFT JOIN dosage_forms df ON m."dosageFormId" = df.id
-        LEFT JOIN manufacturers mf ON m."manufacturerId" = mf.id
-        LEFT JOIN medicine_active_ingredients mai ON m.id = mai."medicineId"
-        LEFT JOIN active_ingredients ai ON mai."activeIngredientId" = ai.id
-        WHERE m."isAvailable" = true
+        LEFT JOIN dosage_forms df ON m."dosage_form_id" = df.id
+        LEFT JOIN manufacturers mf ON m."manufacturer_id" = mf.id
+        LEFT JOIN medicine_active_ingredients mai ON m.id = mai."medicine_id"
+        LEFT JOIN active_ingredients ai ON mai."active_ingredient_id" = ai.id
+        WHERE m."is_available" = true
           AND (
-            m."tradeName" ILIKE ${`%${query}%`}
+            m."trade_name" ILIKE ${`%${query}%`}
             OR ai.name ILIKE ${`%${query}%`}
-            OR similarity(m."tradeName", ${query}) > 0.3
+            OR similarity(m."trade_name", ${query}) > 0.3
             OR similarity(ai.name, ${query}) > 0.3
           )
         GROUP BY m.id, df.name, mf.name, mf.country
-        ORDER BY similarity_score DESC, m."tradeName" ASC
+        ORDER BY similarity_score DESC, m."trade_name" ASC
         LIMIT ${limit}
       `;
 
@@ -69,27 +69,27 @@ export class SearchService {
       const medicines = await this.prisma.$queryRaw<MedicineResponseDto[]>`
         SELECT DISTINCT
           m.id,
-          m."tradeName",
-          m."registrationNumber",
+          m."trade_name",
+          m."registration_number",
           m.strength,
-          m."packageSize",
-          m."priceUzs",
-          m."isGeneric",
-          m."isAvailable",
-          m."prescriptionRequired",
-          df.name as "dosageForm",
+          m."package_size",
+          m."price_uzs",
+          m."is_generic",
+          m."is_available",
+          m."prescription_required",
+          df.name as "dosage_form",
           mf.name as "manufacturer",
-          mf.country as "manufacturerCountry",
-          array_agg(DISTINCT ai.name) as "activeIngredients"
+          mf.country as "manufacturer_country",
+          array_agg(DISTINCT ai.name) as "active_ingredients"
         FROM medicines m
-        LEFT JOIN dosage_forms df ON m."dosageFormId" = df.id
-        LEFT JOIN manufacturers mf ON m."manufacturerId" = mf.id
-        LEFT JOIN medicine_active_ingredients mai ON m.id = mai."medicineId"
-        LEFT JOIN active_ingredients ai ON mai."activeIngredientId" = ai.id
-        WHERE m."isAvailable" = true
+        LEFT JOIN dosage_forms df ON m."dosage_form_id" = df.id
+        LEFT JOIN manufacturers mf ON m."manufacturer_id" = mf.id
+        LEFT JOIN medicine_active_ingredients mai ON m.id = mai."medicine_id"
+        LEFT JOIN active_ingredients ai ON mai."active_ingredient_id" = ai.id
+        WHERE m."is_available" = true
           AND ai.name ILIKE ${`%${ingredientName}%`}
         GROUP BY m.id, df.name, mf.name, mf.country
-        ORDER BY m."priceUzs" ASC NULLS LAST, m."tradeName" ASC
+        ORDER BY m."price_uzs" ASC NULLS LAST, m."trade_name" ASC
         LIMIT ${limit}
       `;
 
@@ -104,9 +104,9 @@ export class SearchService {
     try {
       await this.prisma.userSearch.create({
         data: {
-          searchQuery: query,
-          resultsCount,
-          userIp: '127.0.0.1', // In production, get from request
+          search_query: query,
+          results_count: resultsCount,
+          user_ip: '127.0.0.1', // In production, get from request
         },
       });
     } catch (error) {

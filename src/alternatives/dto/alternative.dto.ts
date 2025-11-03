@@ -5,52 +5,52 @@ export class AlternativeDto {
   id: string;
 
   @ApiProperty({ description: 'Trade name of the alternative medicine' })
-  tradeName: string;
+  trade_name: string;
 
   @ApiPropertyOptional({ description: 'Medicine strength (e.g., "500mg")' })
   strength?: string;
 
   @ApiPropertyOptional({ description: 'Package size (e.g., "10 tablets")' })
-  packageSize?: string;
+  package_size?: string;
 
   @ApiPropertyOptional({ description: 'Price in Uzbek Som' })
-  priceUzs?: number;
+  price_uzs?: number;
 
   @ApiProperty({ description: 'Whether this is a generic medicine' })
-  isGeneric: boolean;
+  is_generic: boolean;
 
   @ApiProperty({ description: 'Whether prescription is required' })
-  prescriptionRequired: boolean;
+  prescription_required: boolean;
 
   @ApiPropertyOptional({ description: 'Dosage form (e.g., "Tablet", "Capsule")' })
-  dosageForm?: string;
+  dosage_form?: string;
 
   @ApiPropertyOptional({ description: 'Manufacturer name' })
   manufacturer?: string;
 
   @ApiPropertyOptional({ description: 'Manufacturer country' })
-  manufacturerCountry?: string;
+  manufacturer_country?: string;
 
   @ApiProperty({ description: 'List of active ingredients', type: [String] })
-  activeIngredients: string[];
+  active_ingredients: string[];
 
   @ApiPropertyOptional({ description: 'Savings amount compared to original medicine' })
   savings?: number;
 
   @ApiPropertyOptional({ description: 'Savings percentage compared to original medicine' })
-  savingsPercentage?: number;
+  savings_percentage?: number;
 
   @ApiProperty({ description: 'Whether this is an exact match (same active ingredients)' })
-  exactMatch: boolean;
+  exact_match: boolean;
 
   @ApiProperty({ description: 'Whether this has the same dosage form' })
-  sameDosageForm: boolean;
+  same_dosage_form: boolean;
 
   @ApiProperty({ description: 'Whether this has the same strength' })
-  sameStrength: boolean;
+  same_strength: boolean;
 
   @ApiProperty({ description: 'Whether this contains narrow therapeutic index ingredients' })
-  hasNarrowTherapeuticIndex: boolean;
+  has_narrow_therapeutic_index: boolean;
 
   @ApiProperty({ description: 'Medical disclaimer' })
   disclaimer: string;

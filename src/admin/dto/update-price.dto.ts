@@ -33,12 +33,12 @@ export class UpdateMedicineDto {
   @ApiPropertyOptional({ description: 'Trade name' })
   @IsOptional()
   @IsString()
-  tradeName?: string;
+  trade_name?: string;
 
   @ApiPropertyOptional({ description: 'Registration number' })
   @IsOptional()
   @IsString()
-  registrationNumber?: string;
+  registration_number?: string;
 
   @ApiPropertyOptional({ description: 'Strength (e.g., "500mg")' })
   @IsOptional()
@@ -48,22 +48,22 @@ export class UpdateMedicineDto {
   @ApiPropertyOptional({ description: 'Package size' })
   @IsOptional()
   @IsString()
-  packageSize?: string;
+  package_size?: string;
 
   @ApiPropertyOptional({ description: 'Whether prescription is required' })
   @IsOptional()
   @IsBoolean()
-  prescriptionRequired?: boolean;
+  prescription_required?: boolean;
 
   @ApiPropertyOptional({ description: 'Whether this is a generic medicine' })
   @IsOptional()
   @IsBoolean()
-  isGeneric?: boolean;
+  is_generic?: boolean;
 
   @ApiPropertyOptional({ description: 'Whether the medicine is available' })
   @IsOptional()
   @IsBoolean()
-  isAvailable?: boolean;
+  is_available?: boolean;
 
   @ApiPropertyOptional({ description: 'Barcode' })
   @IsOptional()
@@ -73,10 +73,10 @@ export class UpdateMedicineDto {
   @ApiPropertyOptional({ description: 'Registration date' })
   @IsOptional()
   @IsDateString()
-  registrationDate?: string;
+  registration_date?: string;
 
   @ApiPropertyOptional({ description: 'Expiry date' })
   @IsOptional()
   @IsDateString()
-  expiryDate?: string;
+  expiry_date?: string;
 }

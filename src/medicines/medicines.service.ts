@@ -24,30 +24,30 @@ export class MedicinesService {
         this.prisma.$queryRaw<MedicineResponseDto[]>`
           SELECT 
             m.id,
-            m."tradeName",
-            m."registrationNumber",
+            m."trade_name",
+            m."registration_number",
             m.strength,
-            m."packageSize",
-            m."priceUzs",
-            m."isGeneric",
-            m."isAvailable",
-            m."prescriptionRequired",
-            df.name as "dosageForm",
+            m."package_size",
+            m."price_uzs",
+            m."is_generic",
+            m."is_available",
+            m."prescription_required",
+            df.name as "dosage_form",
             mf.name as "manufacturer",
-            mf.country as "manufacturerCountry",
-            array_agg(DISTINCT ai.name) as "activeIngredients"
+            mf.country as "manufacturer_country",
+            array_agg(DISTINCT ai.name) as "active_ingredients"
           FROM medicines m
-          LEFT JOIN dosage_forms df ON m."dosageFormId" = df.id
-          LEFT JOIN manufacturers mf ON m."manufacturerId" = mf.id
-          LEFT JOIN medicine_active_ingredients mai ON m.id = mai."medicineId"
-          LEFT JOIN active_ingredients ai ON mai."activeIngredientId" = ai.id
-          WHERE m."isAvailable" = true
+          LEFT JOIN dosage_forms df ON m."dosage_form_id" = df.id
+          LEFT JOIN manufacturers mf ON m."manufacturer_id" = mf.id
+          LEFT JOIN medicine_active_ingredients mai ON m.id = mai."medicine_id"
+          LEFT JOIN active_ingredients ai ON mai."active_ingredient_id" = ai.id
+          WHERE m."is_available" = true
           GROUP BY m.id, df.name, mf.name, mf.country
-          ORDER BY m."tradeName" ASC
+          ORDER BY m."trade_name" ASC
           LIMIT ${limit} OFFSET ${skip}
         `,
         this.prisma.medicine.count({
-          where: { isAvailable: true },
+          where: { is_available: true },
         }),
       ]);
 
@@ -90,49 +90,49 @@ export class MedicinesService {
 
       return {
         id: medicine.id,
-        tradeName: medicine.tradeName,
-        registrationNumber: medicine.registrationNumber,
+        trade_name: medicine.trade_name,
+        registration_number: medicine.registration_number,
         strength: medicine.strength,
-        strengthNumeric: medicine.strengthNumeric ? Number(medicine.strengthNumeric) : undefined,
-        strengthUnit: medicine.strengthUnit,
-        packageSize: medicine.packageSize,
-        packageQuantity: medicine.packageQuantity,
-        priceUzs: medicine.priceUzs ? Number(medicine.priceUzs) : undefined,
-        priceLastUpdated: medicine.priceLastUpdated,
-        prescriptionRequired: medicine.prescriptionRequired,
-        isGeneric: medicine.isGeneric,
-        isAvailable: medicine.isAvailable,
+        strength_numeric: medicine.strength_numeric ? Number(medicine.strength_numeric) : undefined,
+        strength_unit: medicine.strength_unit,
+        package_size: medicine.package_size,
+        package_quantity: medicine.package_quantity,
+        price_uzs: medicine.price_uzs ? Number(medicine.price_uzs) : undefined,
+        price_last_updated: medicine.price_last_updated,
+        prescription_required: medicine.prescription_required,
+        is_generic: medicine.is_generic,
+        is_available: medicine.is_available,
         barcode: medicine.barcode,
-        registrationDate: medicine.registrationDate,
-        expiryDate: medicine.expiryDate,
-        createdAt: medicine.createdAt,
-        updatedAt: medicine.updatedAt,
-        dosageForm: {
+        registration_date: medicine.registration_date,
+        expiry_date: medicine.expiry_date,
+        created_at: medicine.created_at,
+        updated_at: medicine.updated_at,
+        dosage_form: {
           id: medicine.dosage_forms.id,
           name: medicine.dosage_forms.name,
-          nameUzbek: medicine.dosage_forms.nameUzbek,
+          name_uzbek: medicine.dosage_forms.name_uzbek,
           description: medicine.dosage_forms.description,
         },
         manufacturer: {
           id: medicine.manufacturers.id,
           name: medicine.manufacturers.name,
           country: medicine.manufacturers.country,
-          isLocal: medicine.manufacturers.isLocal,
-          reliabilityRating: medicine.manufacturers.reliabilityRating ? Number(medicine.manufacturers.reliabilityRating) : undefined,
+          is_local: medicine.manufacturers.is_local,
+          reliability_rating: medicine.manufacturers.reliability_rating ? Number(medicine.manufacturers.reliability_rating) : undefined,
         },
-        activeIngredients: medicine.medicine_active_ingredients.map((mai) => ({
+        active_ingredients: medicine.medicine_active_ingredients.map((mai) => ({
           id: mai.active_ingredients.id,
           name: mai.active_ingredients.name,
-          nameLatin: mai.active_ingredients.nameLatin,
-          nameUzbek: mai.active_ingredients.nameUzbek,
-          atcCode: mai.active_ingredients.atcCode,
-          therapeuticClass: mai.active_ingredients.therapeuticClass,
+          name_latin: mai.active_ingredients.name_latin,
+          name_uzbek: mai.active_ingredients.name_uzbek,
+          atc_code: mai.active_ingredients.atc_code,
+          therapeutic_class: mai.active_ingredients.therapeutic_class,
           description: mai.active_ingredients.description,
           warnings: mai.active_ingredients.warnings,
-          isNarrowTherapeuticIndex: mai.active_ingredients.isNarrowTherapeuticIndex,
+          is_narrow_therapeutic_index: mai.active_ingredients.is_narrow_therapeutic_index,
           quantity: mai.quantity ? Number(mai.quantity) : undefined,
-          quantityUnit: mai.quantityUnit,
-          isPrimary: mai.isPrimary,
+          quantity_unit: mai.quantity_unit,
+          is_primary: mai.is_primary,
         })),
       };
     } catch (error) {
@@ -155,24 +155,24 @@ export class MedicinesService {
         this.prisma.$queryRaw<MedicineResponseDto[]>`
           SELECT 
             m.id,
-            m."tradeName",
-            m."registrationNumber",
+            m."trade_name",
+            m."registration_number",
             m.strength,
-            m."packageSize",
-            m."priceUzs",
-            m."isGeneric",
-            m."isAvailable",
-            m."prescriptionRequired",
-            df.name as "dosageForm",
+            m."package_size",
+            m."price_uzs",
+            m."is_generic",
+            m."is_available",
+            m."prescription_required",
+            df.name as "dosage_form",
             mf.name as "manufacturer",
-            mf.country as "manufacturerCountry",
-            array_agg(DISTINCT ai.name) as "activeIngredients"
+            mf.country as "manufacturer_country",
+            array_agg(DISTINCT ai.name) as "active_ingredients"
           FROM medicines m
-          LEFT JOIN dosage_forms df ON m."dosageFormId" = df.id
-          LEFT JOIN manufacturers mf ON m."manufacturerId" = mf.id
-          LEFT JOIN medicine_active_ingredients mai ON m.id = mai."medicineId"
-          LEFT JOIN active_ingredients ai ON mai."activeIngredientId" = ai.id
-          WHERE m."isAvailable" = true
+          LEFT JOIN dosage_forms df ON m."dosage_form_id" = df.id
+          LEFT JOIN manufacturers mf ON m."manufacturer_id" = mf.id
+          LEFT JOIN medicine_active_ingredients mai ON m.id = mai."medicine_id"
+          LEFT JOIN active_ingredients ai ON mai."active_ingredient_id" = ai.id
+          WHERE m."is_available" = true
             AND mai.active_ingredient_id = ${ingredientId}
           GROUP BY m.id, df.name, mf.name, mf.country
           ORDER BY m.price_uzs ASC NULLS LAST, m.trade_name ASC
@@ -180,8 +180,8 @@ export class MedicinesService {
         `,
         this.prisma.medicineActiveIngredient.count({
           where: {
-            activeIngredientId: ingredientId,
-            medicines: { isAvailable: true },
+            active_ingredient_id: ingredientId,
+            medicines: { is_available: true },
           },
         }),
       ]);
