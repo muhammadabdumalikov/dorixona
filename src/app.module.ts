@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaService } from './config/prisma.service';
@@ -18,6 +19,7 @@ import { AdminModule } from './admin/admin.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
     ImportModule,
     SearchModule,
     AlternativesModule,

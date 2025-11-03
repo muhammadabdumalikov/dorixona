@@ -23,8 +23,8 @@ export class AdminService {
       await this.prisma.medicine.update({
         where: { id: medicineId },
         data: {
-          priceUzs: updatePriceDto.price,
-          priceLastUpdated: new Date(),
+          price_uzs: updatePriceDto.price,
+          price_last_updated: new Date(),
         },
       });
 
@@ -78,7 +78,7 @@ export class AdminService {
         where: { id: medicineId },
         data: {
           ...updateMedicineDto,
-          updatedAt: new Date(),
+          updated_at: new Date(),
         },
       });
 
@@ -104,8 +104,8 @@ export class AdminService {
       await this.prisma.medicine.update({
         where: { id: medicineId },
         data: {
-          isAvailable: !medicine.isAvailable,
-          updatedAt: new Date(),
+          is_available: !medicine.is_available,
+          updated_at: new Date(),
         },
       });
 
@@ -131,8 +131,8 @@ export class AdminService {
       await this.prisma.medicine.update({
         where: { id: medicineId },
         data: {
-          isAvailable: false,
-          updatedAt: new Date(),
+          is_available: false,
+          updated_at: new Date(),
         },
       });
 
@@ -165,11 +165,11 @@ export class AdminService {
         this.prisma.manufacturer.count(),
         this.prisma.dosageForm.count(),
         this.prisma.medicine.count({
-          where: { priceUzs: { not: null } },
+            where: { price_uzs: { not: null } },
         }),
         this.prisma.medicine.findFirst({
-          orderBy: { createdAt: 'desc' },
-          select: { createdAt: true },
+          orderBy: { created_at: 'desc' },
+          select: { created_at: true },
         }),
       ]);
 
@@ -179,7 +179,7 @@ export class AdminService {
         totalManufacturers,
         totalDosageForms,
         medicinesWithPrices,
-        lastImportDate: lastImportDate?.createdAt,
+        lastImportDate: lastImportDate?.created_at,
       };
     } catch (error) {
       this.logger.error(`Failed to get import statistics: ${error.message}`);

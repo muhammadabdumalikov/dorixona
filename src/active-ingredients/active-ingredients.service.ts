@@ -38,15 +38,15 @@ export class ActiveIngredientsService {
       const activeIngredientsWithCount = activeIngredients.map(ingredient => ({
         id: ingredient.id,
         name: ingredient.name,
-        nameLatin: ingredient.nameLatin,
-        nameUzbek: ingredient.nameUzbek,
-        atcCode: ingredient.atcCode,
-        therapeuticClass: ingredient.therapeuticClass,
+        nameLatin: ingredient.name_latin,
+        nameUzbek: ingredient.name_uzbek,
+        atcCode: ingredient.atc_code,
+        therapeuticClass: ingredient.therapeutic_class,
         description: ingredient.description,
         warnings: ingredient.warnings,
-        isNarrowTherapeuticIndex: ingredient.isNarrowTherapeuticIndex,
-        createdAt: ingredient.createdAt,
-        updatedAt: ingredient.updatedAt,
+        isNarrowTherapeuticIndex: ingredient.is_narrow_therapeutic_index,
+        createdAt: ingredient.created_at,
+        updatedAt: ingredient.updated_at,
         medicineCount: ingredient._count.medicine_active_ingredients,
       }));
 
@@ -82,15 +82,15 @@ export class ActiveIngredientsService {
       return {
         id: activeIngredient.id,
         name: activeIngredient.name,
-        nameLatin: activeIngredient.nameLatin,
-        nameUzbek: activeIngredient.nameUzbek,
-        atcCode: activeIngredient.atcCode,
-        therapeuticClass: activeIngredient.therapeuticClass,
+        nameLatin: activeIngredient.name_latin,
+        nameUzbek: activeIngredient.name_uzbek,
+        atcCode: activeIngredient.atc_code,
+        therapeuticClass: activeIngredient.therapeutic_class,
         description: activeIngredient.description,
         warnings: activeIngredient.warnings,
-        isNarrowTherapeuticIndex: activeIngredient.isNarrowTherapeuticIndex,
-        createdAt: activeIngredient.createdAt,
-        updatedAt: activeIngredient.updatedAt,
+        isNarrowTherapeuticIndex: activeIngredient.is_narrow_therapeutic_index,
+        createdAt: activeIngredient.created_at,
+        updatedAt: activeIngredient.updated_at,
         medicineCount: activeIngredient._count.medicine_active_ingredients,
       };
     } catch (error) {
@@ -105,18 +105,18 @@ export class ActiveIngredientsService {
         SELECT 
           ai.id,
           ai.name,
-          ai."nameLatin",
-          ai."nameUzbek",
-          ai."atcCode",
-          ai."therapeuticClass",
+          ai."name_latin",
+          ai."name_uzbek",
+          ai."atc_code",
+          ai."therapeutic_class",
           ai.description,
           ai.warnings,
-          ai."isNarrowTherapeuticIndex",
-          ai."createdAt",
-          ai."updatedAt",
-          COUNT(mai.id) as "medicineCount"
+          ai."is_narrow_therapeutic_index",
+          ai."created_at",
+          ai."updated_at",
+          COUNT(mai.id) as "medicine_count"
         FROM active_ingredients ai
-        LEFT JOIN medicine_active_ingredients mai ON ai.id = mai."activeIngredientId"
+        LEFT JOIN medicine_active_ingredients mai ON ai.id = mai."active_ingredient_id"
         WHERE ai.name ILIKE ${`%${query}%`}
           OR ai.name_latin ILIKE ${`%${query}%`}
           OR ai.name_uzbek ILIKE ${`%${query}%`}

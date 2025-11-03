@@ -5,6 +5,7 @@ import * as ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as puppeteer from 'puppeteer';
 
 export interface ImportResult {
   totalProcessed: number;
@@ -42,9 +43,9 @@ export class ImportService {
     try {
       // Get all Excel files from public directory
       const excelFiles = [
-        // '1. Отеч.лек...xls',
+        '1. Отеч.лек...xls',
         '2. СНГлек.ср..xls2 (1).xls',
-        // '3. Заруб.лек.ср. (3).xls',
+        '3. Заруб.лек.ср. (3).xls',
       ];
 
       for (const fileName of excelFiles) {
@@ -299,7 +300,7 @@ export class ImportService {
       // Check if medicine already exists by registration number
       if (row.registrationNumber) {
         const existing = await tx.medicine.findUnique({
-          where: { registrationNumber: row.registrationNumber },
+          where: { registration_number: row.registrationNumber },
         });
         if (existing) {
           return false; // Skip duplicate
@@ -326,14 +327,14 @@ export class ImportService {
       // Create medicine
       const medicine = await tx.medicine.create({
         data: {
-          tradeName: row.tradeName,
-          registrationNumber: row.registrationNumber || null,
+          trade_name: row.tradeName,
+          registration_number: row.registrationNumber || null,
           strength: row.strength || null,
-          strengthNumeric: parsedStrength?.value || null,
-          strengthUnit: parsedStrength?.unit || null,
-          packageSize: row.packageSize || null,
-          manufacturerId: manufacturer.id,
-          dosageFormId: dosageForm.id,
+          strength_numeric: parsedStrength?.value || null,
+          strength_unit: parsedStrength?.unit || null,
+          package_size: row.packageSize || null,
+          manufacturer_id: manufacturer.id,
+          dosage_form_id: dosageForm.id,
         },
       });
 
@@ -346,12 +347,272 @@ export class ImportService {
 
       await tx.medicineActiveIngredient.create({
         data: {
-          medicineId: medicine.id,
-          activeIngredientId: activeIngredient.id,
+          medicine_id: medicine.id,
+          active_ingredient_id: activeIngredient.id,
         },
       });
 
       return true;
     });
+  }
+
+  /**
+   * Scrape medicine data from ArzonApteka API
+   * Uses Puppeteer to make POST request with proper headers and form data
+   */
+  async scrapeArzonApteka(searchTerm: string = 'midaks'): Promise<ImportResult> {
+    this.logger.log(`Starting ArzonApteka scraping for search term: ${searchTerm}`);
+    
+    const result: ImportResult = {
+      totalProcessed: 0,
+      created: 0,
+      skipped: 0,
+      errors: [],
+    };
+
+    let browser: puppeteer.Browser | null = null;
+
+    try {
+      // Launch browser
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      });
+
+      const page = await browser.newPage();
+
+      // Set user agent to avoid detection
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      );
+
+      // API configuration - can be overridden via environment variables
+      const apiUrl = 'https://api.arzonapteka.name/api/v4/ru/trigrams';
+      const apiKey = process.env.ARZON_API_KEY || 'ba6263952cd57f83c10983bfaddd0308';
+      const userId = process.env.ARZON_USER_ID || 'a081b16b-0466-49d6-a377-69256599b628';
+      const region = process.env.ARZON_REGION || '-3';
+      const countryCode = process.env.ARZON_COUNTRY_CODE || '1';
+
+      // Set extra headers
+      await page.setExtraHTTPHeaders({
+        'Accept': '*/*',
+        'Accept-Encoding': 'gzip, deflate, br, zstd',
+        'Api-Key': apiKey,
+      });
+
+      this.logger.log(`Making POST request to ArzonApteka API with search: ${searchTerm}`);
+
+      // Make POST request with form data using fetch in browser context
+      const apiResponse = await page.evaluate(
+        async (url, apiKey, userId, search, region, countryCode, detail, platform) => {
+          const formData = new FormData();
+          formData.append('user', userId);
+          formData.append('search', search);
+          formData.append('region', region);
+          formData.append('country_code', countryCode);
+          formData.append('detail', detail);
+          formData.append('platform', platform);
+
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Accept': '*/*',
+              'Accept-Encoding': 'gzip, deflate, br, zstd',
+              'Api-Key': apiKey,
+            },
+            body: formData,
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
+        apiUrl,
+        apiKey,
+        userId,
+        searchTerm,
+        region,
+        countryCode,
+        'true', // detail
+        'web', // platform
+      );
+
+      this.logger.log(`API Response received: ${JSON.stringify(apiResponse).substring(0, 500)}`);
+      console.log(1111111, apiResponse);
+      // Process the API response
+      if (apiResponse && apiResponse.ok !== false) {
+        if (apiResponse.result && Array.isArray(apiResponse.result)) {
+          this.logger.log(`Found ${apiResponse.result.length} medicines in API response`);
+
+          result.totalProcessed = apiResponse.result.length;
+
+          // Process each medicine and save to database
+          for (const medicine of apiResponse.result) {
+            try {
+              const created = await this.processArzonMedicine(medicine);
+              if (created) {
+                result.created++;
+              } else {
+                result.skipped++;
+              }
+            } catch (error) {
+              this.logger.error(`Error processing medicine: ${error.message}`);
+              result.errors.push(`Error processing medicine: ${error.message}`);
+            }
+          }
+        } else if (apiResponse.result && typeof apiResponse.result === 'object') {
+          // Handle single medicine object
+          try {
+            const created = await this.processArzonMedicine(apiResponse.result);
+            if (created) {
+              result.created++;
+              result.totalProcessed = 1;
+            } else {
+              result.skipped++;
+              result.totalProcessed = 1;
+            }
+          } catch (error) {
+            this.logger.error(`Error processing medicine: ${error.message}`);
+            result.errors.push(`Error processing medicine: ${error.message}`);
+          }
+        } else {
+          this.logger.warn(`Unexpected API response format: ${JSON.stringify(apiResponse).substring(0, 200)}`);
+          result.errors.push('Unexpected API response format');
+        }
+      } else {
+        this.logger.warn(`API returned error: ${JSON.stringify(apiResponse)}`);
+        result.errors.push(apiResponse.error || 'API returned error');
+      }
+
+      await browser.close();
+      browser = null;
+
+      this.logger.log(
+        `Scraping completed. Processed: ${result.totalProcessed}, Created: ${result.created}, Skipped: ${result.skipped}`,
+      );
+      return result;
+    } catch (error) {
+      this.logger.error(`Scraping failed: ${error.message}`, error.stack);
+      result.errors.push(`Scraping error: ${error.message}`);
+
+      if (browser) {
+        await browser.close();
+      }
+
+      return result;
+    }
+  }
+
+  /**
+   * Process a single medicine from ArzonApteka API response
+   * Adapt this based on the actual API response structure
+   */
+  private async processArzonMedicine(medicine: any): Promise<boolean> {
+    try {
+      // TODO: Adapt this based on the actual ArzonApteka API response structure
+      // This is a placeholder implementation
+
+      // Example structure (adjust based on actual API):
+      // {
+      //   id: string,
+      //   name: string,
+      //   price: number,
+      //   manufacturer: string,
+      //   active_ingredient: string,
+      //   ...
+      // }
+
+      if (!medicine || !medicine.name) {
+        this.logger.warn('Medicine missing required fields, skipping');
+        return false;
+      }
+
+      // Check if medicine already exists (by name or registration number)
+      const existing = await this.prisma.medicine.findFirst({
+        where: {
+          OR: [
+            { trade_name: medicine.name },
+            { registration_number: medicine.registration_number || medicine.id },
+          ],
+        },
+      });
+
+      if (existing) {
+        this.logger.debug(`Medicine ${medicine.name} already exists, skipping`);
+        return false;
+      }
+
+      // Create or find manufacturer
+      let manufacturer = null;
+      if (medicine.manufacturer || medicine.manufacturer_name) {
+        manufacturer = await this.prisma.manufacturer.upsert({
+          where: { name: medicine.manufacturer || medicine.manufacturer_name },
+          update: {},
+          create: {
+            name: medicine.manufacturer || medicine.manufacturer_name,
+            country: medicine.country || null,
+            is_local: medicine.is_local || false,
+          },
+        });
+      }
+
+      // Create or find dosage form
+      let dosageForm = null;
+      if (medicine.dosage_form || medicine.form) {
+        dosageForm = await this.prisma.dosageForm.upsert({
+          where: { name: medicine.dosage_form || medicine.form },
+          update: {},
+          create: {
+            name: medicine.dosage_form || medicine.form,
+          },
+        });
+      }
+
+      // Parse strength
+      const strength = medicine.strength || medicine.dosage || '';
+      const parsedStrength = StrengthParser.parse(strength);
+
+      // Create medicine
+      const createdMedicine = await this.prisma.medicine.create({
+        data: {
+          trade_name: medicine.name || medicine.trade_name,
+          registration_number: medicine.registration_number || medicine.id || null,
+          strength: strength || null,
+          strength_numeric: parsedStrength?.value || null,
+          strength_unit: parsedStrength?.unit || null,
+          package_size: medicine.package_size || medicine.package || null,
+          price_uzs: medicine.price ? parseFloat(medicine.price.toString()) : null,
+          manufacturer_id: manufacturer?.id || null,
+          dosage_form_id: dosageForm?.id || null,
+          is_generic: medicine.is_generic || false,
+          is_available: medicine.is_available !== false,
+          prescription_required: medicine.prescription_required || true,
+        },
+      });
+
+      // Create or find active ingredient and link to medicine
+      if (medicine.active_ingredient || medicine.ingredient) {
+        const activeIngredient = await this.prisma.activeIngredient.upsert({
+          where: { name: medicine.active_ingredient || medicine.ingredient },
+          update: {},
+          create: { name: medicine.active_ingredient || medicine.ingredient },
+        });
+
+        await this.prisma.medicineActiveIngredient.create({
+          data: {
+            medicine_id: createdMedicine.id,
+            active_ingredient_id: activeIngredient.id,
+          },
+        });
+      }
+
+      this.logger.debug(`Successfully created medicine: ${createdMedicine.trade_name}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Error processing Arzon medicine: ${error.message}`);
+      throw error;
+    }
   }
 }

@@ -5,22 +5,20 @@
 
 echo "🏥 Setting up Medicine Alternative Finder Database..."
 
-# Check if PostgreSQL is running (Docker or local)
-if ! pg_isready -h localhost -p 5432 -q; then
-    echo "❌ PostgreSQL is not running on localhost:5432"
+# Check if PostgreSQL Docker container is running
+if ! docker ps | grep -q postgres; then
+    echo "❌ PostgreSQL Docker container is not running"
     echo ""
-    echo "If you're using Docker, make sure your PostgreSQL container is running:"
-    echo "   docker ps | grep postgres"
-    echo "   docker start <postgres-container-name>"
+    echo "Please start your PostgreSQL Docker container:"
+    echo "   docker ps -a | grep postgres  # Check if container exists"
+    echo "   docker start <postgres-container-name>  # Start existing container"
     echo ""
-    echo "If you're using local PostgreSQL:"
-    echo "   brew services start postgresql  # On macOS with Homebrew"
-    echo "   sudo systemctl start postgresql # On Linux"
-    echo "   net start postgresql-x64-13     # On Windows"
+    echo "Or create a new PostgreSQL container:"
+    echo "   docker run --name postgres-db -e POSTGRES_PASSWORD=4324 -p 5432:5432 -d postgres:13"
     exit 1
 fi
 
-echo "✅ PostgreSQL is running on localhost:5432"
+echo "✅ PostgreSQL Docker container is running"
 
 # Database configuration
 DB_NAME="medicine_db"
@@ -31,13 +29,23 @@ DB_PORT="5432"
 
 echo "📊 Creating database '$DB_NAME'..."
 
+# Get the PostgreSQL container name
+POSTGRES_CONTAINER=$(docker ps | grep postgres | awk '{print $1}' | head -1)
+
+if [ -z "$POSTGRES_CONTAINER" ]; then
+    echo "❌ Could not find PostgreSQL container"
+    exit 1
+fi
+
+echo "Using PostgreSQL container: $POSTGRES_CONTAINER"
+
 # Create database if it doesn't exist
-PGPASSWORD=$DB_PASSWORD createdb -h $DB_HOST -p $DB_PORT -U $DB_USER $DB_NAME 2>/dev/null || echo "Database already exists"
+docker exec $POSTGRES_CONTAINER createdb -U $DB_USER $DB_NAME 2>/dev/null || echo "Database already exists"
 
 echo "📋 Running database schema..."
 
-# Run the SQL schema
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f base.sql
+# Run the SQL schema using Docker
+docker exec -i $POSTGRES_CONTAINER psql -U $DB_USER -d $DB_NAME < base.sql
 
 if [ $? -eq 0 ]; then
     echo "✅ Database setup completed successfully!"
@@ -53,7 +61,9 @@ else
     echo ""
     echo "Common Docker issues:"
     echo "   - Make sure PostgreSQL container is running: docker ps"
-    echo "   - Check container logs: docker logs <postgres-container-name>"
-    echo "   - Verify port mapping: docker port <postgres-container-name>"
+    echo "   - Check container logs: docker logs $POSTGRES_CONTAINER"
+    echo "   - Verify port mapping: docker port $POSTGRES_CONTAINER"
+    echo "   - Check if base.sql file exists in current directory"
+    echo "   - Verify database permissions: docker exec $POSTGRES_CONTAINER psql -U postgres -c '\\l'"
     exit 1
 fi

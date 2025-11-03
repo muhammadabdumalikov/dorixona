@@ -5,41 +5,41 @@ export class MedicineResponseDto {
   id: string;
 
   @ApiProperty({ description: 'Trade name of the medicine' })
-  tradeName: string;
+  trade_name: string;
 
   @ApiPropertyOptional({ description: 'Registration number' })
-  registrationNumber?: string;
+  registration_number?: string;
 
   @ApiPropertyOptional({ description: 'Medicine strength (e.g., "500mg")' })
   strength?: string;
 
   @ApiPropertyOptional({ description: 'Package size (e.g., "10 tablets")' })
-  packageSize?: string;
+  package_size?: string;
 
   @ApiPropertyOptional({ description: 'Price in Uzbek Som' })
-  priceUzs?: number;
+  price_uzs?: number;
 
   @ApiProperty({ description: 'Whether this is a generic medicine' })
-  isGeneric: boolean;
+  is_generic: boolean;
 
   @ApiProperty({ description: 'Whether the medicine is available' })
-  isAvailable: boolean;
+  is_available: boolean;
 
   @ApiProperty({ description: 'Whether prescription is required' })
-  prescriptionRequired: boolean;
+  prescription_required: boolean;
 
   @ApiPropertyOptional({ description: 'Dosage form (e.g., "Tablet", "Capsule")' })
-  dosageForm?: string;
+  dosage_form?: string;
 
   @ApiPropertyOptional({ description: 'Manufacturer name' })
   manufacturer?: string;
 
   @ApiPropertyOptional({ description: 'Manufacturer country' })
-  manufacturerCountry?: string;
+  manufacturer_country?: string;
 
   @ApiProperty({ description: 'List of active ingredients', type: [String] })
-  activeIngredients: string[];
+  active_ingredients: string[];
 
   @ApiPropertyOptional({ description: 'Similarity score for search results' })
-  similarityScore?: number;
+  similarity_score?: number;
 }

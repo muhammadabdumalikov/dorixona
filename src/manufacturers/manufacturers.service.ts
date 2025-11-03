@@ -39,10 +39,10 @@ export class ManufacturersService {
         id: manufacturer.id,
         name: manufacturer.name,
         country: manufacturer.country,
-        isLocal: manufacturer.isLocal,
-        reliabilityRating: manufacturer.reliabilityRating ? Number(manufacturer.reliabilityRating) : undefined,
-        createdAt: manufacturer.createdAt,
-        updatedAt: manufacturer.updatedAt,
+        isLocal: manufacturer.is_local,
+        reliabilityRating: manufacturer.reliability_rating ? Number(manufacturer.reliability_rating) : undefined,
+        createdAt: manufacturer.created_at,
+        updatedAt: manufacturer.updated_at,
         medicineCount: manufacturer._count.medicines,
       }));
 
@@ -79,10 +79,10 @@ export class ManufacturersService {
         id: manufacturer.id,
         name: manufacturer.name,
         country: manufacturer.country,
-        isLocal: manufacturer.isLocal,
-        reliabilityRating: manufacturer.reliabilityRating ? Number(manufacturer.reliabilityRating) : undefined,
-        createdAt: manufacturer.createdAt,
-        updatedAt: manufacturer.updatedAt,
+        isLocal: manufacturer.is_local,
+        reliabilityRating: manufacturer.reliability_rating ? Number(manufacturer.reliability_rating) : undefined,
+        createdAt: manufacturer.created_at,
+        updatedAt: manufacturer.updated_at,
         medicineCount: manufacturer._count.medicines,
       };
     } catch (error) {
@@ -98,13 +98,13 @@ export class ManufacturersService {
           m.id,
           m.name,
           m.country,
-          m."isLocal",
-          m."reliabilityRating",
-          m."createdAt",
-          m."updatedAt",
+          m."is_local",
+          m."reliability_rating",
+          m."created_at",
+          m."updated_at",
           COUNT(med.id) as "medicineCount"
         FROM manufacturers m
-        LEFT JOIN medicines med ON m.id = med."manufacturerId"
+        LEFT JOIN medicines med ON m.id = med."manufacturer_id"
         WHERE m.name ILIKE ${`%${query}%`}
           OR m.country ILIKE ${`%${query}%`}
           OR similarity(m.name, ${query}) > 0.3
@@ -123,7 +123,7 @@ export class ManufacturersService {
   async getLocalManufacturers(): Promise<ManufacturerDto[]> {
     try {
       const manufacturers = await this.prisma.manufacturer.findMany({
-        where: { isLocal: true },
+        where: { is_local: true },
         orderBy: { name: 'asc' },
         include: {
           _count: {
@@ -138,10 +138,10 @@ export class ManufacturersService {
         id: manufacturer.id,
         name: manufacturer.name,
         country: manufacturer.country,
-        isLocal: manufacturer.isLocal,
-        reliabilityRating: manufacturer.reliabilityRating ? Number(manufacturer.reliabilityRating) : undefined,
-        createdAt: manufacturer.createdAt,
-        updatedAt: manufacturer.updatedAt,
+        isLocal: manufacturer.is_local,
+        reliabilityRating: manufacturer.reliability_rating ? Number(manufacturer.reliability_rating) : undefined,
+        createdAt: manufacturer.created_at,
+        updatedAt: manufacturer.updated_at,
         medicineCount: manufacturer._count.medicines,
       }));
     } catch (error) {
