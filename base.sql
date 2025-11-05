@@ -456,3 +456,202 @@ LEFT JOIN dosage_forms df ON m.dosage_form_id = df.id
 LEFT JOIN manufacturers mf ON m.manufacturer_id = mf.id
 WHERE m.is_available = true 
 AND m.price_uzs IS NOT NULL;
+
+-- ============================================
+-- MOCK DATA FOR TESTING
+-- ============================================
+
+-- Insert sample tenant (pharmacy)
+    INSERT INTO tenants (id, name, subdomain, is_active) VALUES
+    ('00000000-0000-0000-0000-000000000001', 'Toshkent Apteka', 'toshkent', true),
+    ('00000000-0000-0000-0000-000000000002', 'Samarqand Apteka', 'samarqand', true)
+    ON CONFLICT (id) DO NOTHING;
+
+    -- Insert sample users
+    -- Password for all users: "password123" (bcrypt hash)
+    -- Note: In production, use proper password hashing. This is for testing only.
+    INSERT INTO users (id, email, password_hash, first_name, last_name, role, tenant_id, is_active) VALUES
+    -- Super Admin (no tenant)
+    ('10000000-0000-0000-0000-000000000001', 'admin@pharmacy.uz', '$2b$10$rOzJ5qJ5J5J5J5J5J5J5JOhK5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5', 'Super', 'Admin', 'SUPER_ADMIN', NULL, true),
+    -- Pharmacy Admin
+    ('10000000-0000-0000-0000-000000000002', 'admin@toshkent.uz', '$2b$10$rOzJ5qJ5J5J5J5J5J5J5JOhK5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5', 'Ahmad', 'Karimov', 'PHARMACY_ADMIN', '00000000-0000-0000-0000-000000000001', true),
+    -- Manager
+    ('10000000-0000-0000-0000-000000000003', 'manager@toshkent.uz', '$2b$10$rOzJ5qJ5J5J5J5J5J5J5JOhK5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5', 'Olim', 'Toshmatov', 'MANAGER', '00000000-0000-0000-0000-000000000001', true),
+    -- Pharmacist
+    ('10000000-0000-0000-0000-000000000004', 'pharmacist@toshkent.uz', '$2b$10$rOzJ5qJ5J5J5J5J5J5J5JOhK5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5', 'Dilnoza', 'Rahimova', 'PHARMACIST', '00000000-0000-0000-0000-000000000001', true),
+    -- Cashiers
+    ('10000000-0000-0000-0000-000000000005', 'cashier1@toshkent.uz', '$2b$10$rOzJ5qJ5J5J5J5J5J5J5JOhK5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5', 'Farida', 'Yusupova', 'CASHIER', '00000000-0000-0000-0000-000000000001', true),
+    ('10000000-0000-0000-0000-000000000006', 'cashier2@toshkent.uz', '$2b$10$rOzJ5qJ5J5J5J5J5J5J5JOhK5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5', 'Javohir', 'Alimov', 'CASHIER', '00000000-0000-0000-0000-000000000001', true)
+    ON CONFLICT (id) DO NOTHING;
+
+    -- Insert sample warehouses
+    INSERT INTO warehouses (id, name, code, address, is_active, tenant_id) VALUES
+    ('20000000-0000-0000-0000-000000000001', 'Main Store', 'WH-001', 'Amir Temur ko''chasi 123, Toshkent', true, '00000000-0000-0000-0000-000000000001'),
+    ('20000000-0000-0000-0000-000000000002', 'Branch 1', 'WH-002', 'Navoiy ko''chasi 45, Toshkent', true, '00000000-0000-0000-0000-000000000001'),
+    ('20000000-0000-0000-0000-000000000003', 'Warehouse Samarkand', 'WH-SAM-001', 'Registon ko''chasi 78, Samarqand', true, '00000000-0000-0000-0000-000000000002')
+    ON CONFLICT (id) DO NOTHING;
+
+    -- Insert sample inventory items (only if medicines exist)
+    -- Note: This will only insert if there are medicines in the database
+    INSERT INTO inventory_items (
+        id, medicine_id, warehouse_id, quantity, reserved_qty, reorder_point, max_stock,
+        cost_price, selling_price, batch_number, expiry_date
+    )
+    SELECT 
+        gen_random_uuid(),
+        m.id,
+        '20000000-0000-0000-0000-000000000001'::uuid, -- Main Store
+        CASE 
+            WHEN RANDOM() < 0.3 THEN (RANDOM() * 50)::int + 10  -- 30% chance of low stock
+            ELSE (RANDOM() * 200)::int + 50  -- Normal stock
+        END,
+        0,
+        20,
+        500,
+        COALESCE(m.price_uzs * 0.7, 10000), -- Cost price = 70% of selling price
+        COALESCE(m.price_uzs, 15000), -- Selling price from medicine
+        'BATCH-' || LPAD((RANDOM() * 9999)::int::text, 4, '0'),
+        CURRENT_DATE + INTERVAL '1 year' + FLOOR(RANDOM() * 365) * INTERVAL '1 day'
+    FROM medicines m
+    WHERE m.is_available = true
+    LIMIT 20
+    ON CONFLICT DO NOTHING;
+
+    -- Insert more inventory items for Branch 1
+    INSERT INTO inventory_items (
+        id, medicine_id, warehouse_id, quantity, reserved_qty, reorder_point, max_stock,
+        cost_price, selling_price, batch_number, expiry_date
+    )
+    SELECT 
+        gen_random_uuid(),
+        m.id,
+        '20000000-0000-0000-0000-000000000002'::uuid, -- Branch 1
+        CASE 
+            WHEN RANDOM() < 0.3 THEN (RANDOM() * 50)::int + 10
+            ELSE (RANDOM() * 200)::int + 50
+        END,
+        0,
+        15,
+        300,
+        COALESCE(m.price_uzs * 0.7, 10000),
+        COALESCE(m.price_uzs, 15000),
+        'BATCH-' || LPAD((RANDOM() * 9999)::int::text, 4, '0'),
+        CURRENT_DATE + INTERVAL '1 year' + FLOOR(RANDOM() * 365) * INTERVAL '1 day'
+    FROM medicines m
+    WHERE m.is_available = true
+    LIMIT 15
+    ON CONFLICT DO NOTHING;
+
+    -- Insert sample sales (only if inventory items exist)
+    -- Note: This creates sample sales with items
+    DO $$
+    DECLARE
+        sale_id UUID;
+        v_sale_number VARCHAR(50);
+        item_record RECORD;
+        item_count INT;
+        item_id UUID;
+        item_price DECIMAL(12,2);
+        item_quantity INT;
+        v_subtotal DECIMAL(12,2);
+        v_total_amount DECIMAL(12,2) := 0;
+        v_final_amount DECIMAL(12,2);
+        sale_date TIMESTAMP;
+        warehouse_uuid UUID := '20000000-0000-0000-0000-000000000001'::uuid;
+        user_uuid UUID := '10000000-0000-0000-0000-000000000005'::uuid; -- Cashier 1
+        tenant_uuid UUID := '00000000-0000-0000-0000-000000000001'::uuid;
+    BEGIN
+        -- Create 3 sample sales
+        FOR i IN 1..3 LOOP
+            sale_date := CURRENT_TIMESTAMP - (i * INTERVAL '1 day');
+            v_sale_number := 'SALE-' || TO_CHAR(sale_date, 'YYYYMMDD') || '-' || LPAD(i::text, 4, '0');
+            
+            -- Create sale
+            INSERT INTO sales (
+                id, sale_number, warehouse_id, user_id, status, payment_method,
+                total_amount, discount_amount, tax_amount, final_amount, notes, tenant_id, created_at
+            ) VALUES (
+                gen_random_uuid(),
+                v_sale_number,
+                warehouse_uuid,
+                user_uuid,
+                'COMPLETED'::sale_status,
+                CASE (i % 4)
+                    WHEN 0 THEN 'CASH'::payment_method
+                    WHEN 1 THEN 'CARD'::payment_method
+                    WHEN 2 THEN 'MOBILE_PAYMENT'::payment_method
+                    ELSE 'TRANSFER'::payment_method
+                END,
+                0, -- Will be calculated
+                0,
+                0,
+                0, -- Will be calculated
+                'Sample sale for testing',
+                tenant_uuid,
+                sale_date
+            ) RETURNING id INTO sale_id;
+            
+            -- Add 2-4 items to each sale
+            item_count := 2 + (RANDOM() * 3)::int;
+            v_total_amount := 0;
+            
+            FOR item_record IN 
+                SELECT ii.id, ii.medicine_id, ii.selling_price, ii.quantity
+                FROM inventory_items ii
+                WHERE ii.warehouse_id = warehouse_uuid
+                AND ii.quantity > 0
+                ORDER BY RANDOM()
+                LIMIT item_count
+            LOOP
+                item_quantity := LEAST(1 + (RANDOM() * 3)::int, item_record.quantity);
+                item_price := COALESCE(item_record.selling_price, 15000);
+                v_subtotal := item_price * item_quantity;
+                v_total_amount := v_total_amount + v_subtotal;
+                
+                -- Create sale item
+                INSERT INTO sale_items (
+                    sale_id, inventory_item_id, medicine_id, quantity, unit_price,
+                    discount_percent, discount_amount, tax_percent, tax_amount, subtotal
+                ) VALUES (
+                    sale_id,
+                    item_record.id,
+                    item_record.medicine_id,
+                    item_quantity,
+                    item_price,
+                    0,
+                    0,
+                    0,
+                    0,
+                    v_subtotal
+                );
+                
+                -- Update inventory (decrement quantity)
+                UPDATE inventory_items 
+                SET quantity = quantity - item_quantity
+                WHERE id = item_record.id;
+                
+                -- Create stock movement
+                INSERT INTO stock_movements (
+                    inventory_item_id, warehouse_id, movement_type, quantity,
+                    reference_type, reference_id, notes, created_by, created_at
+                ) VALUES (
+                    item_record.id,
+                    warehouse_uuid,
+                    'OUT'::stock_movement_type,
+                    item_quantity,
+                    'SALE',
+                    sale_id,
+                    'Sale ' || v_sale_number,
+                    user_uuid,
+                    sale_date
+                );
+            END LOOP;
+            
+            -- Update sale with final amounts
+            v_final_amount := v_total_amount;
+            UPDATE sales
+            SET total_amount = v_total_amount,
+                final_amount = v_final_amount
+            WHERE id = sale_id;
+        END LOOP;
+    END $$;

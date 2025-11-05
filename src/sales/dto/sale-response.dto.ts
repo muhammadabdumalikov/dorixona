@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SaleStatus, PaymentMethod } from '@prisma/client';
 import { SaleItemResponseDto } from './sale-item.dto';
 

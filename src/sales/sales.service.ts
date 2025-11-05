@@ -306,7 +306,23 @@ export class SalesService {
       throw new NotFoundException(`Sale with ID ${id} not found`);
     }
 
-    return sale as SaleResponseDto;
+    // Convert Decimal to number for response
+    return {
+      ...sale,
+      total_amount: Number(sale.total_amount),
+      discount_amount: Number(sale.discount_amount),
+      tax_amount: Number(sale.tax_amount),
+      final_amount: Number(sale.final_amount),
+      sale_items: sale.sale_items.map((item) => ({
+        ...item,
+        unit_price: Number(item.unit_price),
+        discount_percent: item.discount_percent ? Number(item.discount_percent) : undefined,
+        discount_amount: item.discount_amount ? Number(item.discount_amount) : undefined,
+        tax_percent: item.tax_percent ? Number(item.tax_percent) : undefined,
+        tax_amount: item.tax_amount ? Number(item.tax_amount) : undefined,
+        subtotal: Number(item.subtotal),
+      })),
+    } as SaleResponseDto;
   }
 
   /**
@@ -383,8 +399,17 @@ export class SalesService {
       this.prisma.sale.count({ where }),
     ]);
 
+    // Convert Decimal to number for response
+    const salesWithNumbers = sales.map((sale) => ({
+      ...sale,
+      total_amount: Number(sale.total_amount),
+      discount_amount: Number(sale.discount_amount),
+      tax_amount: Number(sale.tax_amount),
+      final_amount: Number(sale.final_amount),
+    }));
+
     return {
-      sales,
+      sales: salesWithNumbers,
       total,
       page,
       limit,

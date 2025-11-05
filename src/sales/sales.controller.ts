@@ -8,7 +8,6 @@ import {
   UseGuards,
   ParseUUIDPipe,
   ParseEnumPipe,
-  ParseDatePipe,
 } from '@nestjs/common';
 import {
   ApiTags,

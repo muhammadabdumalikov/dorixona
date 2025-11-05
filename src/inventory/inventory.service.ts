@@ -169,8 +169,15 @@ export class InventoryService {
       this.prisma.inventoryItem.count({ where }),
     ]);
 
+    // Convert Decimal to number for response
+    const itemsWithNumbers = items.map((item) => ({
+      ...item,
+      cost_price: item.cost_price ? Number(item.cost_price) : undefined,
+      selling_price: item.selling_price ? Number(item.selling_price) : undefined,
+    }));
+
     return {
-      items,
+      items: itemsWithNumbers as InventoryItemResponseDto[],
       total,
       page,
       limit,
@@ -214,7 +221,12 @@ export class InventoryService {
       throw new NotFoundException(`Inventory item with ID ${id} not found`);
     }
 
-    return item as InventoryItemResponseDto;
+    // Convert Decimal to number for response
+    return {
+      ...item,
+      cost_price: item.cost_price ? Number(item.cost_price) : undefined,
+      selling_price: item.selling_price ? Number(item.selling_price) : undefined,
+    } as InventoryItemResponseDto;
   }
 
   /**
@@ -277,7 +289,12 @@ export class InventoryService {
       `Stock adjusted for item ${id}: ${oldQuantity} -> ${newQuantity}`,
     );
 
-    return updatedItem as InventoryItemResponseDto;
+    // Convert Decimal to number for response
+    return {
+      ...updatedItem,
+      cost_price: updatedItem.cost_price ? Number(updatedItem.cost_price) : undefined,
+      selling_price: updatedItem.selling_price ? Number(updatedItem.selling_price) : undefined,
+    } as InventoryItemResponseDto;
   }
 
   /**
