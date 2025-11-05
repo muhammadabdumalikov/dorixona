@@ -10,10 +10,10 @@ export class ImportSchedulerService {
   constructor(private readonly importService: ImportService) {}
 
 //   /**
-//    * Run scraping every 10 seconds
-//    * Using cron expression: */10 * * * * * (every 10 seconds)
+//    * Run scraping every 20 seconds
+//    * Using cron expression: */20 * * * * * (every 20 seconds)
 //    */
-  @Cron('*/10 * * * * *')
+  @Cron('*/25 * * * * *')
   async handleScrapingCron() {
     // Prevent overlapping executions
     if (this.isRunning) {

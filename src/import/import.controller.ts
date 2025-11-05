@@ -42,9 +42,9 @@ export class ImportController {
   @Post('scrape-arzon')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Manually trigger ArzonApteka scraping',
+    summary: 'Manually trigger ArzonApteka scraping and price update',
     description:
-      'Manually triggers the Puppeteer-based scraping of ArzonApteka API. Note: This also runs automatically every 10 seconds via cron job.',
+      'Manually triggers the scraping flow: 1) Gets medicines from database needing price updates, 2) Searches ArzonApteka for each, 3) Uses OpenAI to analyze and match medicines, 4) Updates prices. Note: This also runs automatically every 10 seconds via cron job.',
   })
   @ApiResponse({
     status: 200,
@@ -52,11 +52,11 @@ export class ImportController {
     schema: {
       type: 'object',
       properties: {
-        totalProcessed: { type: 'number', description: 'Total items processed' },
-        created: { type: 'number', description: 'New medicines created' },
+        totalProcessed: { type: 'number', description: 'Total medicines processed' },
+        created: { type: 'number', description: 'Prices updated successfully' },
         skipped: {
           type: 'number',
-          description: 'Items skipped (duplicates or invalid)',
+          description: 'Medicines skipped (no match or no price found)',
         },
         errors: {
           type: 'array',
@@ -68,7 +68,7 @@ export class ImportController {
   })
   @ApiResponse({ status: 500, description: 'Scraping failed' })
   async scrapeArzonApteka(@Body() body?: { search?: string }): Promise<ImportResult> {
-    const searchTerm = body?.search || 'midaks';
-    return await this.importService.scrapeArzonApteka(searchTerm);
+    // searchTerm parameter is kept for backward compatibility but not used in new flow
+    return await this.importService.scrapeArzonApteka();
   }
 }

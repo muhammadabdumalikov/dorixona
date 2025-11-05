@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as puppeteer from 'puppeteer';
+import OpenAI from 'openai';
 
 export interface ImportResult {
   totalProcessed: number;
@@ -27,8 +28,20 @@ export interface ExcelRow {
 @Injectable()
 export class ImportService {
   private readonly logger = new Logger(ImportService.name);
+  private openai: OpenAI | null = null;
 
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {
+    // Initialize OpenAI client if API key is provided
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (apiKey) {
+      this.openai = new OpenAI({
+        apiKey: apiKey,
+      });
+      this.logger.log('OpenAI client initialized');
+    } else {
+      this.logger.warn('OPENAI_API_KEY not found in environment variables');
+    }
+  }
 
   async importMedicines(): Promise<ImportResult> {
     this.logger.log('Starting medicine import process...');
@@ -357,11 +370,11 @@ export class ImportService {
   }
 
   /**
-   * Scrape medicine data from ArzonApteka API
-   * Uses Puppeteer to make POST request with proper headers and form data
+   * Scrape medicine data from ArzonApteka API and update prices using OpenAI
+   * Flow: 1. Get first result from ArzonApteka 2. Analyze with OpenAI 3. Update price
    */
-  async scrapeArzonApteka(searchTerm: string = 'midaks'): Promise<ImportResult> {
-    this.logger.log(`Starting ArzonApteka scraping for search term: ${searchTerm}`);
+  async scrapeArzonApteka(searchTerm?: string): Promise<ImportResult> {
+    this.logger.log(`Starting ArzonApteka scraping and price update process...`);
     
     const result: ImportResult = {
       totalProcessed: 0,
@@ -370,39 +383,139 @@ export class ImportService {
       errors: [],
     };
 
+    try {
+      // Step 1: Get all medicines from our database that need price updates
+      const medicinesToUpdate = await this.prisma.medicine.findMany({
+        where: {
+          OR: [
+            { price_uzs: null, cron_price_processed: false },
+            { price_last_updated: null, cron_price_processed: false },
+          ],
+        },
+        include: {
+          manufacturers: true,
+          dosage_forms: true,
+          medicine_active_ingredients: {
+            include: {
+              active_ingredients: true,
+            },
+          },
+        },
+        take: 1, // Process in batches
+      });
+
+      if (medicinesToUpdate.length === 0) {
+        this.logger.log('No medicines found that need price updates');
+        return result;
+      }
+
+      this.logger.log(`Found ${medicinesToUpdate.length} medicines to update prices for`);
+
+      // Step 2: Process each medicine
+      for (const medicine of medicinesToUpdate) {
+        try {
+          // Search for this medicine on ArzonApteka
+          const searchTerm = medicine.trade_name;
+          const arzonResult = await this.searchArzonApteka(searchTerm);
+
+          if (!arzonResult || !arzonResult.result || !Array.isArray(arzonResult.result) || arzonResult.result.length === 0) {
+            this.logger.warn(`No results from ArzonApteka for: ${searchTerm}`);
+            result.skipped++;
+            continue;
+          }
+
+          // Step 3: Get five similar medicines from ArzonApteka result
+          const arzonMedicines = arzonResult.result.slice(0, 5);
+          this.logger.log(`Found ${arzonMedicines.length} similar medicines from ArzonApteka for: ${searchTerm}`);
+          // Step 4: Analyze with OpenAI to identify which medicine matches best and get its price
+          const analysisResult = await this.analyzeMedicineWithOpenAI(medicine, arzonMedicines);
+
+          console.log(111111, analysisResult);
+
+          if (analysisResult && analysisResult.price) {
+            // Step 5: Update medicine price in database
+            await this.prisma.medicine.update({
+              where: { id: medicine.id },
+              data: {
+                price_uzs: analysisResult.price,
+                price_last_updated: new Date(),
+                cron_price_processed: true,
+                cron_processed_count: {
+                  increment: 1,
+                },
+              },
+            });
+
+            const matchInfo = analysisResult.matchedIndex !== undefined 
+              ? ` (matched index ${analysisResult.matchedIndex}, confidence: ${analysisResult.confidence || 'N/A'})`
+              : '';
+            this.logger.log(`Updated price for ${medicine.trade_name}: ${analysisResult.price} UZS${matchInfo}`);
+            result.created++;
+          } else {
+            await this.prisma.medicine.update({
+              where: { id: medicine.id },
+              data: {
+                cron_price_processed: true,
+                cron_processed_count: {
+                  increment: 1,
+                },
+              },
+            })
+            this.logger.warn(`OpenAI analysis did not find a matching medicine or price for ${medicine.trade_name}`);
+            result.skipped++;
+          }
+
+          result.totalProcessed++;
+
+          // Small delay to avoid rate limiting
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        } catch (error) {
+          this.logger.error(`Error processing medicine ${medicine.trade_name}: ${error.message}`);
+          result.errors.push(`Error processing ${medicine.trade_name}: ${error.message}`);
+          result.skipped++;
+        }
+      }
+
+      this.logger.log(
+        `Scraping completed. Processed: ${result.totalProcessed}, Updated: ${result.created}, Skipped: ${result.skipped}`,
+      );
+      return result;
+    } catch (error) {
+      this.logger.error(`Scraping failed: ${error.message}`, error.stack);
+      result.errors.push(`Scraping error: ${error.message}`);
+      return result;
+    }
+  }
+
+  /**
+   * Search ArzonApteka API for a medicine
+   */
+  private async searchArzonApteka(searchTerm: string): Promise<any> {
     let browser: puppeteer.Browser | null = null;
 
     try {
-      // Launch browser
       browser = await puppeteer.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
 
       const page = await browser.newPage();
-
-      // Set user agent to avoid detection
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
       );
 
-      // API configuration - can be overridden via environment variables
       const apiUrl = 'https://api.arzonapteka.name/api/v4/ru/trigrams';
       const apiKey = process.env.ARZON_API_KEY || 'ba6263952cd57f83c10983bfaddd0308';
       const userId = process.env.ARZON_USER_ID || 'a081b16b-0466-49d6-a377-69256599b628';
       const region = process.env.ARZON_REGION || '-3';
       const countryCode = process.env.ARZON_COUNTRY_CODE || '1';
 
-      // Set extra headers
       await page.setExtraHTTPHeaders({
         'Accept': '*/*',
         'Accept-Encoding': 'gzip, deflate, br, zstd',
         'Api-Key': apiKey,
       });
 
-      this.logger.log(`Making POST request to ArzonApteka API with search: ${searchTerm}`);
-
-      // Make POST request with form data using fetch in browser context
       const apiResponse = await page.evaluate(
         async (url, apiKey, userId, search, region, countryCode, detail, platform) => {
           const formData = new FormData();
@@ -435,73 +548,116 @@ export class ImportService {
         searchTerm,
         region,
         countryCode,
-        'true', // detail
-        'web', // platform
+        'true',
+        'web',
       );
-
-      this.logger.log(`API Response received: ${JSON.stringify(apiResponse).substring(0, 500)}`);
-      console.log(1111111, apiResponse);
-      // Process the API response
-      if (apiResponse && apiResponse.ok !== false) {
-        if (apiResponse.result && Array.isArray(apiResponse.result)) {
-          this.logger.log(`Found ${apiResponse.result.length} medicines in API response`);
-
-          result.totalProcessed = apiResponse.result.length;
-
-          // Process each medicine and save to database
-          for (const medicine of apiResponse.result) {
-            try {
-              const created = await this.processArzonMedicine(medicine);
-              if (created) {
-                result.created++;
-              } else {
-                result.skipped++;
-              }
-            } catch (error) {
-              this.logger.error(`Error processing medicine: ${error.message}`);
-              result.errors.push(`Error processing medicine: ${error.message}`);
-            }
-          }
-        } else if (apiResponse.result && typeof apiResponse.result === 'object') {
-          // Handle single medicine object
-          try {
-            const created = await this.processArzonMedicine(apiResponse.result);
-            if (created) {
-              result.created++;
-              result.totalProcessed = 1;
-            } else {
-              result.skipped++;
-              result.totalProcessed = 1;
-            }
-          } catch (error) {
-            this.logger.error(`Error processing medicine: ${error.message}`);
-            result.errors.push(`Error processing medicine: ${error.message}`);
-          }
-        } else {
-          this.logger.warn(`Unexpected API response format: ${JSON.stringify(apiResponse).substring(0, 200)}`);
-          result.errors.push('Unexpected API response format');
-        }
-      } else {
-        this.logger.warn(`API returned error: ${JSON.stringify(apiResponse)}`);
-        result.errors.push(apiResponse.error || 'API returned error');
-      }
 
       await browser.close();
-      browser = null;
-
-      this.logger.log(
-        `Scraping completed. Processed: ${result.totalProcessed}, Created: ${result.created}, Skipped: ${result.skipped}`,
-      );
-      return result;
+      return apiResponse;
     } catch (error) {
-      this.logger.error(`Scraping failed: ${error.message}`, error.stack);
-      result.errors.push(`Scraping error: ${error.message}`);
-
+      this.logger.error(`ArzonApteka search failed: ${error.message}`);
       if (browser) {
         await browser.close();
       }
+      throw error;
+    }
+  }
 
-      return result;
+  /**
+   * Analyze medicine with OpenAI to match against array of ArzonApteka results and get best match price
+   */
+  private async analyzeMedicineWithOpenAI(ourMedicine: any, arzonMedicines: any[]): Promise<{ price: number; confidence?: string; matchedIndex?: number } | null> {
+    if (!this.openai) {
+      this.logger.error('OpenAI client not initialized. Please set OPENAI_API_KEY environment variable.');
+      return null;
+    }
+
+    if (!arzonMedicines || arzonMedicines.length === 0) {
+      this.logger.warn('No ArzonApteka medicines provided for analysis');
+      return null;
+    }
+
+    try {
+      const prompt = `You are a pharmaceutical data analyst. I need you to analyze our medicine record against multiple similar medicines from ArzonApteka and identify which one is the exact match, then provide its price in Uzbek Som (UZS).
+
+Our Medicine Data:
+- Trade Name: ${ourMedicine.trade_name}
+- Registration Number: ${ourMedicine.registration_number || 'N/A'}
+- Manufacturer: ${ourMedicine.manufacturers?.name || 'N/A'}
+- Strength: ${ourMedicine.strength || 'N/A'}
+- Dosage Form: ${ourMedicine.dosage_forms?.name || 'N/A'}
+- Package Size: ${ourMedicine.package_size || 'N/A'}
+- Active Ingredients: ${ourMedicine.medicine_active_ingredients.map((mai: any) => mai.active_ingredients.name).join(', ') || 'N/A'}
+
+ArzonApteka Results (array of similar medicines from search):
+${JSON.stringify(arzonMedicines, null, 2)}
+
+Please analyze ALL ArzonApteka medicines and:
+1. Identify which medicine from the array is the EXACT match to our medicine (by index, starting from 0)
+2. Determine match confidence (high/medium/low)
+3. If a match is found, extract the price in Uzbek Som (UZS) from that matched medicine
+4. If multiple medicines match, pick the one with highest confidence or best data quality
+5. Return ONLY a JSON object in this exact format:
+{
+  "is_match": true/false,
+  "matched_index": 0,
+  "confidence": "high/medium/low",
+  "price": 12345.50,
+  "matched_medicine_name": "name from ArzonApteka",
+  "reason": "brief explanation of why this medicine was selected"
+}
+
+Important:
+- Compare trade names, manufacturers, strengths, dosage forms, and active ingredients
+- Match index should be the position in the array (0 for first, 1 for second, etc.)
+- If prices are in different formats or currencies, convert to UZS
+- If no exact match is found, set "is_match" to false and "price" to null
+- Prefer medicines with complete information and matching active ingredients`;
+
+      const completion = await this.openai.chat.completions.create({
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a pharmaceutical data analyst expert in matching medicine records and extracting pricing information. You excel at comparing multiple similar medicines and identifying the exact match.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+      });
+
+      const responseText = completion.choices[0]?.message?.content;
+      if (!responseText) {
+        this.logger.error('OpenAI returned empty response');
+        return null;
+      }
+
+      const analysis = JSON.parse(responseText);
+      this.logger.log(`OpenAI Analysis for ${ourMedicine.trade_name}: ${JSON.stringify(analysis)}`);
+
+      if (analysis.is_match && analysis.price !== null && analysis.price !== undefined) {
+        // Validate matched index is within array bounds
+        const matchedIndex = analysis.matched_index;
+        if (matchedIndex !== undefined && matchedIndex >= 0 && matchedIndex < arzonMedicines.length) {
+          this.logger.log(`Matched medicine at index ${matchedIndex}: ${analysis.matched_medicine_name || 'N/A'}`);
+          return {
+            price: parseFloat(analysis.price),
+            confidence: analysis.confidence,
+            matchedIndex: matchedIndex,
+          };
+        } else {
+          this.logger.warn(`Invalid matched_index ${matchedIndex} for array of length ${arzonMedicines.length}`);
+        }
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.error(`OpenAI analysis failed: ${error.message}`);
+      return null;
     }
   }
 
@@ -530,6 +686,8 @@ export class ImportService {
       }
 
       // Check if medicine already exists (by name or registration number)
+      console.log(2222222, medicine);
+      
       const existing = await this.prisma.medicine.findFirst({
         where: {
           OR: [

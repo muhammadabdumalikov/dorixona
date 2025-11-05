@@ -65,6 +65,8 @@ model Medicine {
   package_quantity     Int?
   price_uzs            Decimal?                   @db.Decimal(12, 2)
   price_last_updated   DateTime?                  @db.Timestamp(6)
+  cron_price_processed Boolean?                   @default(false)
+  cron_processed_count Int?                       @default(0)
   prescription_required Boolean?                   @default(true)
   is_generic           Boolean?                   @default(false)
   is_available         Boolean?                   @default(true)
@@ -76,6 +78,7 @@ model Medicine {
   medicine_active_ingredients MedicineActiveIngredient[]
   medicine_equivalence        MedicineEquivalence[]
   medicine_prices             MedicinePrice[]
+  inventory_items             InventoryItem[]
   dosage_forms                DosageForm?                @relation(fields: [dosage_form_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "medicines_dosage_form_fkey")
   manufacturers               Manufacturer?              @relation(fields: [manufacturer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "medicines_manufacturer_fkey")
   user_searches               UserSearch[]
@@ -183,4 +186,128 @@ model MedicineEquivalence {
 
   @@id([equivalence_group_id, medicine_id])
   @@map("medicine_equivalence")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  PHARMACY_ADMIN
+  PHARMACIST
+  CASHIER
+  MANAGER
+
+  @@map("user_role")
+}
+
+model Tenant {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String   @db.VarChar(255)
+  subdomain  String?  @unique @db.VarChar(100)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @updatedAt @db.Timestamp(6)
+  users      User[]
+  warehouses Warehouse[]
+
+  @@index([subdomain], map: "idx_tenants_subdomain")
+  @@index([is_active], map: "idx_tenants_active")
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email        String   @unique @db.VarChar(255)
+  password_hash String  @db.VarChar(255)
+  first_name   String?  @db.VarChar(100)
+  last_name    String?  @db.VarChar(100)
+  role         UserRole @default(CASHIER)
+  tenant_id    String?  @db.Uuid
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now()) @db.Timestamp(6)
+  updated_at   DateTime @updatedAt @db.Timestamp(6)
+  tenant       Tenant?  @relation(fields: [tenant_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  stock_movements StockMovement[]
+
+  @@index([email], map: "idx_users_email")
+  @@index([tenant_id], map: "idx_users_tenant")
+  @@index([role], map: "idx_users_role")
+  @@index([is_active], map: "idx_users_active")
+  @@map("users")
+}
+
+model Warehouse {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name           String   @db.VarChar(255)
+  code           String?  @db.VarChar(50)
+  address        String?
+  is_active      Boolean  @default(true)
+  tenant_id      String   @db.Uuid
+  created_at     DateTime @default(now()) @db.Timestamp(6)
+  updated_at     DateTime @updatedAt @db.Timestamp(6)
+  tenant         Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  inventory_items InventoryItem[]
+  stock_movements StockMovement[]
+
+  @@index([tenant_id], map: "idx_warehouses_tenant")
+  @@index([is_active], map: "idx_warehouses_active")
+  @@index([code], map: "idx_warehouses_code")
+  @@map("warehouses")
+}
+
+model InventoryItem {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  medicine_id    String   @db.Uuid
+  warehouse_id   String   @db.Uuid
+  quantity       Int      @default(0)
+  reserved_qty   Int      @default(0)
+  reorder_point  Int?     @default(0)
+  max_stock      Int?
+  cost_price     Decimal? @db.Decimal(12, 2)
+  selling_price  Decimal? @db.Decimal(12, 2)
+  batch_number   String?  @db.VarChar(100)
+  expiry_date    DateTime? @db.Date
+  created_at     DateTime @default(now()) @db.Timestamp(6)
+  updated_at     DateTime @updatedAt @db.Timestamp(6)
+  medicine       Medicine @relation(fields: [medicine_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  warehouse      Warehouse @relation(fields: [warehouse_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  stock_movements StockMovement[]
+
+  @@unique([medicine_id, warehouse_id, batch_number])
+  @@index([warehouse_id], map: "idx_inventory_items_warehouse")
+  @@index([medicine_id], map: "idx_inventory_items_medicine")
+  @@index([quantity], map: "idx_inventory_items_quantity")
+  @@index([expiry_date], map: "idx_inventory_items_expiry")
+  @@map("inventory_items")
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  TRANSFER
+  RETURN
+
+  @@map("stock_movement_type")
+}
+
+model StockMovement {
+  id              String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  inventory_item_id String           @db.Uuid
+  warehouse_id    String            @db.Uuid
+  movement_type   StockMovementType
+  quantity        Int
+  reference_type  String?           @db.VarChar(50)
+  reference_id    String?           @db.Uuid
+  notes           String?
+  created_by      String?           @db.Uuid
+  created_at      DateTime          @default(now()) @db.Timestamp(6)
+  inventory_item  InventoryItem     @relation(fields: [inventory_item_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  warehouse       Warehouse         @relation(fields: [warehouse_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user            User?             @relation(fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([warehouse_id], map: "idx_stock_movements_warehouse")
+  @@index([inventory_item_id], map: "idx_stock_movements_inventory_item")
+  @@index([created_at], map: "idx_stock_movements_created")
+  @@index([movement_type], map: "idx_stock_movements_type")
+  @@index([created_by], map: "idx_stock_movements_created_by")
+  @@map("stock_movements")
 }

@@ -12,6 +12,8 @@ import { MedicinesModule } from './medicines/medicines.module';
 import { ActiveIngredientsModule } from './active-ingredients/active-ingredients.module';
 import { ManufacturersModule } from './manufacturers/manufacturers.module';
 import { AdminModule } from './admin/admin.module';
+import { AuthModule } from './auth/auth.module';
+import { InventoryModule } from './inventory/inventory.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { AdminModule } from './admin/admin.module';
       envFilePath: '.env',
     }),
     ScheduleModule.forRoot(),
+    AuthModule,
+    InventoryModule,
     ImportModule,
     SearchModule,
     AlternativesModule,

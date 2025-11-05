@@ -15,13 +15,26 @@ async function bootstrap() {
 
   // Swagger documentation
   const config = new DocumentBuilder()
-    .setTitle('Medicine Alternative Finder API')
-    .setDescription('API for finding cheaper medicine alternatives based on active ingredients')
+    .setTitle('Pharmacy ERP API')
+    .setDescription('Multi-tenant Pharmacy ERP System with Inventory Management')
     .setVersion('1.0')
-    .addTag('medicines')
-    .addTag('search')
-    .addTag('alternatives')
-    .addTag('admin')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'Bearer', // This name is used by @ApiBearerAuth() decorator
+    )
+    .addTag('auth', 'Authentication endpoints')
+    .addTag('inventory', 'Inventory management')
+    .addTag('medicines', 'Medicine catalog')
+    .addTag('search', 'Medicine search')
+    .addTag('alternatives', 'Medicine alternatives')
+    .addTag('admin', 'Admin operations')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

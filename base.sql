@@ -148,6 +148,98 @@ CREATE TABLE medicine_equivalence (
 );
 
 -- ============================================
+-- ERP MODULE: Multi-Tenancy & Authentication
+-- ============================================
+
+-- 10. Tenants (Pharmacy Organizations)
+CREATE TYPE user_role AS ENUM (
+    'SUPER_ADMIN',
+    'PHARMACY_ADMIN',
+    'PHARMACIST',
+    'CASHIER',
+    'MANAGER'
+);
+
+CREATE TABLE tenants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    subdomain VARCHAR(100) UNIQUE,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 11. Users (Authentication & Authorization)
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    role user_role NOT NULL DEFAULT 'CASHIER',
+    tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- ERP MODULE: Inventory Management
+-- ============================================
+
+-- 12. Warehouses (Storage Locations)
+CREATE TABLE warehouses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(50),
+    address TEXT,
+    is_active BOOLEAN DEFAULT true,
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 13. Inventory Items (Stock per Medicine per Warehouse)
+CREATE TABLE inventory_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    medicine_id UUID NOT NULL REFERENCES medicines(id) ON DELETE CASCADE,
+    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    reserved_qty INTEGER NOT NULL DEFAULT 0,
+    reorder_point INTEGER DEFAULT 0,
+    max_stock INTEGER,
+    cost_price DECIMAL(12,2),
+    selling_price DECIMAL(12,2),
+    batch_number VARCHAR(100),
+    expiry_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(medicine_id, warehouse_id, batch_number)
+);
+
+-- 14. Stock Movements (Audit Trail)
+CREATE TYPE stock_movement_type AS ENUM (
+    'IN',
+    'OUT',
+    'ADJUSTMENT',
+    'TRANSFER',
+    'RETURN'
+);
+
+CREATE TABLE stock_movements (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    inventory_item_id UUID NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
+    movement_type stock_movement_type NOT NULL,
+    quantity INTEGER NOT NULL,
+    reference_type VARCHAR(50), -- e.g., 'PURCHASE', 'SALE', 'ADJUSTMENT'
+    reference_id UUID, -- ID of the related document
+    notes TEXT,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
 -- INDEXES for Performance
 -- ============================================
 
@@ -178,6 +270,34 @@ CREATE INDEX idx_prices_amount ON medicine_prices(price_uzs);
 CREATE INDEX idx_searches_created ON user_searches(created_at);
 CREATE INDEX idx_searches_medicine ON user_searches(medicine_id);
 
+-- Tenants
+CREATE INDEX idx_tenants_subdomain ON tenants(subdomain);
+CREATE INDEX idx_tenants_active ON tenants(is_active);
+
+-- Users
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_tenant ON users(tenant_id);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_active ON users(is_active);
+
+-- Warehouses
+CREATE INDEX idx_warehouses_tenant ON warehouses(tenant_id);
+CREATE INDEX idx_warehouses_active ON warehouses(is_active);
+CREATE INDEX idx_warehouses_code ON warehouses(code);
+
+-- Inventory Items
+CREATE INDEX idx_inventory_items_warehouse ON inventory_items(warehouse_id);
+CREATE INDEX idx_inventory_items_medicine ON inventory_items(medicine_id);
+CREATE INDEX idx_inventory_items_quantity ON inventory_items(quantity);
+CREATE INDEX idx_inventory_items_expiry ON inventory_items(expiry_date);
+
+-- Stock Movements
+CREATE INDEX idx_stock_movements_warehouse ON stock_movements(warehouse_id);
+CREATE INDEX idx_stock_movements_inventory_item ON stock_movements(inventory_item_id);
+CREATE INDEX idx_stock_movements_created ON stock_movements(created_at);
+CREATE INDEX idx_stock_movements_type ON stock_movements(movement_type);
+CREATE INDEX idx_stock_movements_created_by ON stock_movements(created_by);
+
 -- ============================================
 -- FUNCTIONS & TRIGGERS
 -- ============================================
@@ -201,6 +321,18 @@ CREATE TRIGGER update_medicines_updated_at BEFORE UPDATE ON medicines
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_pharmacies_updated_at BEFORE UPDATE ON pharmacies
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_tenants_updated_at BEFORE UPDATE ON tenants
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_warehouses_updated_at BEFORE UPDATE ON warehouses
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_inventory_items_updated_at BEFORE UPDATE ON inventory_items
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================
