@@ -585,28 +585,55 @@ END
 END
 ```
 
-### 9.2 Stock Sale Flow (Future)
+### 9.2 Stock Sale Flow
 
 ```
 1. User (CASHIER) creates sale
-   POST /api/sales (to be implemented)
-   → Sale record created
-
-2. System automatically creates stock movement
-   POST /api/inventory/movements (internal)
+   POST /api/sales
    Body: {
-     inventory_item_id: "xxx",
-     warehouse_id: "yyy",
-     movement_type: "OUT",
-     quantity: 5,
-     reference_type: "SALE",
-     reference_id: "sale_123"
+     warehouse_id: "xxx",
+     payment_method: "CASH",
+     items: [
+       {
+         inventory_item_id: "yyy",
+         quantity: 5,
+         unit_price: 15000,
+         discount_percent: 10
+       }
+     ]
    }
-   → Inventory item quantity -= 5
-   → Stock movement record created
+   → Sale validation begins
 
-3. System validates stock availability
-   → If insufficient stock, sale rejected
+2. System validates warehouse belongs to tenant
+   → If not found → Return 404 Not Found
+
+3. For each item:
+   a. Validate inventory item exists in warehouse
+   b. Check available stock (quantity - reserved_qty)
+   c. If insufficient stock → Return 400 Bad Request
+   d. Get unit price (from item or inventory_item.selling_price)
+   e. Calculate subtotal with discount and tax
+
+4. Calculate sale totals:
+   - total_amount = sum of (quantity * unit_price)
+   - discount_amount = sum of item discounts
+   - tax_amount = sum of item taxes
+   - final_amount = total_amount - discount_amount + tax_amount
+
+5. Generate unique sale number (SALE-YYYYMMDD-XXXX)
+
+6. BEGIN TRANSACTION
+
+7. Create sale record with status COMPLETED
+
+8. For each item:
+   a. Create sale_item record
+   b. Update inventory_item.quantity (decrement)
+   c. Create stock_movement (OUT, reference_type='SALE')
+
+9. COMMIT TRANSACTION
+
+10. Return SaleResponseDto with all details
 END
 ```
 
@@ -668,6 +695,225 @@ END
 
 ---
 
+## 12. Sales & POS Flows
+
+### 12.1 Create Sale Flow (POS Transaction)
+
+```
+START
+  ↓
+User (CASHIER) authenticated with JWT token
+  ↓
+Submit CreateSaleDto:
+  - warehouse_id
+  - payment_method (CASH, CARD, TRANSFER, MOBILE_PAYMENT)
+  - items[] (at least 1 item required)
+  - notes (optional)
+  ↓
+Extract tenantId and userId from JWT token
+  ↓
+Validate warehouse belongs to tenant
+  ├─ Not found → Return 404 Not Found
+  └─ Found → Continue
+  ↓
+For each item in items:
+  ├─ Validate inventory_item exists in warehouse
+  ├─ Check available stock (quantity - reserved_qty)
+  ├─ If insufficient → Return 400 Bad Request
+  ├─ Get unit_price (from item or inventory_item.selling_price)
+  └─ Calculate subtotal with discount and tax
+  ↓
+Calculate sale totals:
+  - total_amount = sum(quantity * unit_price)
+  - discount_amount = sum(item discounts)
+  - tax_amount = sum(item taxes)
+  - final_amount = total_amount - discount_amount + tax_amount
+  ↓
+Generate unique sale_number (SALE-YYYYMMDD-XXXX)
+  ↓
+BEGIN TRANSACTION
+  ↓
+Create sale record:
+  - sale_number
+  - warehouse_id
+  - user_id (cashier)
+  - status = COMPLETED
+  - payment_method
+  - total_amount, discount_amount, tax_amount, final_amount
+  - notes
+  - tenant_id
+  ↓
+For each item:
+  ├─ Create sale_item record
+  ├─ Update inventory_item.quantity (decrement by quantity)
+  └─ Create stock_movement (OUT, reference_type='SALE')
+  ↓
+COMMIT TRANSACTION
+  ↓
+Return SaleResponseDto with items and details
+END
+```
+
+### 12.2 Sale Cancellation Flow
+
+```
+START
+  ↓
+User (MANAGER or higher role) authenticated
+  ↓
+POST /api/sales/:id/cancel
+  ↓
+Extract tenantId and userId from JWT token
+  ↓
+Find sale by ID and tenantId
+  ├─ Not found → Return 404 Not Found
+  └─ Found → Continue
+  ↓
+Check sale status
+  ├─ Already CANCELLED → Return 400 Bad Request
+  ├─ REFUNDED → Return 400 Bad Request
+  └─ COMPLETED → Continue
+  ↓
+Check if sale is from same day
+  ├─ No → Return 403 Forbidden (can only cancel same day)
+  └─ Yes → Continue
+  ↓
+BEGIN TRANSACTION
+  ↓
+Update sale status to CANCELLED
+  ↓
+For each sale_item:
+  ├─ Update inventory_item.quantity (increment by quantity)
+  └─ Create stock_movement (RETURN, reference_type='SALE_CANCELLATION')
+  ↓
+COMMIT TRANSACTION
+  ↓
+Return updated SaleResponseDto
+END
+```
+
+### 12.3 Receipt Generation Flow
+
+```
+START
+  ↓
+User authenticated with any role
+  ↓
+GET /api/sales/:id/receipt
+  ↓
+Extract tenantId from JWT token
+  ↓
+Find sale by ID and tenantId with relations:
+  - sale_items (with medicine details)
+  - warehouse
+  - user (cashier)
+  - tenant
+  ↓
+Sale not found?
+  ├─ YES → Return Error
+  └─ NO → Continue
+  ↓
+Build receipt data:
+  - sale_number
+  - sale_date
+  - tenant_name
+  - warehouse_name and address
+  - cashier_name (from user first_name/last_name or email)
+  - items[] (medicine_name, quantity, unit_price, subtotal, discounts, taxes)
+  - total_amount, discount_amount, tax_amount, final_amount
+  - payment_method
+  - notes
+  ↓
+Return ReceiptDto
+END
+```
+
+### 12.4 Sales Statistics Flow
+
+```
+START
+  ↓
+User authenticated with any role
+  ↓
+GET /api/sales/stats/overview
+  ↓
+Extract tenantId from JWT token
+  ↓
+Build query filters:
+  - tenant_id = currentTenantId (always)
+  - status = COMPLETED (always)
+  - warehouse_id (optional filter)
+  - created_at date range (optional)
+  ↓
+Query database:
+  - Count total sales
+  - Sum final_amount (total revenue)
+  - Get all sales for payment method breakdown
+  ↓
+Calculate statistics:
+  - total_sales = count
+  - total_revenue = sum of final_amount
+  - average_transaction = total_revenue / total_sales
+  - sales_by_payment_method = grouped count by payment_method
+  ↓
+Return statistics object
+END
+```
+
+### 12.5 Sale Number Generation Flow
+
+```
+START
+  ↓
+Get current date (YYYYMMDD format)
+  ↓
+Build prefix: "SALE-YYYYMMDD"
+  ↓
+Query sales table:
+  WHERE tenant_id = currentTenantId
+    AND created_at >= start_of_today
+    AND created_at <= end_of_today
+    AND sale_number LIKE 'SALE-YYYYMMDD-%'
+  ↓
+Count existing sales for today
+  ↓
+Generate sequence number:
+  sequence = (count + 1) padded to 4 digits (0001, 0002, etc.)
+  ↓
+Return: "SALE-YYYYMMDD-XXXX"
+END
+```
+
+### 12.6 Sale Item Calculation Flow
+
+```
+START
+  ↓
+Input: quantity, unit_price, discount_percent, discount_amount, tax_percent
+  ↓
+Calculate base_amount = quantity * unit_price
+  ↓
+Calculate discount:
+  ├─ If discount_amount provided → use discount_amount
+  ├─ Else if discount_percent provided → discount = (base_amount * discount_percent) / 100
+  └─ Else → discount = 0
+  ↓
+Calculate amount_after_discount = base_amount - discount
+  ↓
+Calculate tax:
+  ├─ If tax_percent provided → tax = (amount_after_discount * tax_percent) / 100
+  └─ Else → tax = 0
+  ↓
+Calculate subtotal = amount_after_discount + tax
+  ↓
+Round all amounts to 2 decimal places
+  ↓
+Return: { subtotal, discountAmount, taxAmount }
+END
+```
+
+---
+
 ## Notes
 
 1. **Tenant Isolation**: All queries automatically filter by tenant_id to ensure data isolation
@@ -679,6 +925,39 @@ END
 
 ---
 
+## 13. Permission Matrix (Updated)
+
+### 13.1 Role Permissions
+
+| Feature | SUPER_ADMIN | PHARMACY_ADMIN | MANAGER | PHARMACIST | CASHIER |
+|---------|-------------|----------------|---------|------------|---------|
+| Create Warehouse | ✅ | ✅ | ✅ | ❌ | ❌ |
+| List Warehouses | ✅ | ✅ | ✅ | ✅ | ✅ |
+| View Inventory | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Adjust Stock | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Record Stock Movement | ✅ | ✅ | ✅ | ✅ | ❌ |
+| View Stock Movements | ✅ | ✅ | ✅ | ✅ | ✅ |
+| View Low Stock | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Create Sale | ✅ | ✅ | ✅ | ✅ | ✅ |
+| View Sales | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Cancel Sale | ✅ | ✅ | ✅ | ❌ | ❌ |
+| View Receipt | ✅ | ✅ | ✅ | ✅ | ✅ |
+| View Sales Statistics | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Register User | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Login | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+### 13.2 Data Access Rules
+
+- All users can only access data from their own tenant
+- SUPER_ADMIN can access all tenants (future enhancement)
+- Warehouse operations require tenant ownership validation
+- Stock movements require tenant ownership validation
+- Inventory items inherit tenant from warehouse
+- Sales inherit tenant from warehouse
+- Sale cancellation restricted to same day and requires MANAGER+ role
+
+---
+
 ## Future Enhancements
 
 1. **Stock Transfer**: Transfer stock between warehouses
@@ -687,6 +966,10 @@ END
 4. **Automatic Reordering**: Trigger purchase orders when stock reaches reorder point
 5. **Multi-warehouse Support**: Support for transfers between warehouses
 6. **Reporting**: Advanced inventory reports and analytics
-7. **Sales Integration**: Automatic stock deduction on sales
+7. **Sales Returns/Refunds**: Handle product returns and refunds
 8. **Purchase Integration**: Automatic stock addition on purchases
+9. **Barcode Scanning**: POS barcode scanning for faster checkout
+10. **Receipt Printing**: Hardware integration for receipt printing
+11. **Sales Reports**: Advanced sales analytics and reporting
+12. **Discounts and Promotions**: Automated discount management
 

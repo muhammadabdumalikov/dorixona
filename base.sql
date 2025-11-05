@@ -240,6 +240,59 @@ CREATE TABLE stock_movements (
 );
 
 -- ============================================
+-- ERP MODULE: Sales & POS
+-- ============================================
+
+-- 15. Sales (Sales Orders/Invoices - Anonymous Sales)
+CREATE TYPE sale_status AS ENUM (
+    'PENDING',
+    'COMPLETED',
+    'CANCELLED',
+    'REFUNDED'
+);
+
+CREATE TYPE payment_method AS ENUM (
+    'CASH',
+    'CARD',
+    'TRANSFER',
+    'MOBILE_PAYMENT'
+);
+
+CREATE TABLE sales (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    sale_number VARCHAR(50) NOT NULL UNIQUE,
+    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    status sale_status NOT NULL DEFAULT 'COMPLETED',
+    payment_method payment_method NOT NULL,
+    total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    discount_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    final_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    notes TEXT,
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 16. Sale Items (Line Items for each Sale)
+CREATE TABLE sale_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    sale_id UUID NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+    inventory_item_id UUID NOT NULL REFERENCES inventory_items(id) ON DELETE RESTRICT,
+    medicine_id UUID NOT NULL REFERENCES medicines(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL,
+    unit_price DECIMAL(12,2) NOT NULL,
+    discount_percent DECIMAL(5,2) DEFAULT 0,
+    discount_amount DECIMAL(12,2) DEFAULT 0,
+    tax_percent DECIMAL(5,2) DEFAULT 0,
+    tax_amount DECIMAL(12,2) DEFAULT 0,
+    subtotal DECIMAL(12,2) NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
 -- INDEXES for Performance
 -- ============================================
 
@@ -297,6 +350,21 @@ CREATE INDEX idx_stock_movements_inventory_item ON stock_movements(inventory_ite
 CREATE INDEX idx_stock_movements_created ON stock_movements(created_at);
 CREATE INDEX idx_stock_movements_type ON stock_movements(movement_type);
 CREATE INDEX idx_stock_movements_created_by ON stock_movements(created_by);
+CREATE INDEX idx_stock_movements_reference ON stock_movements(reference_type, reference_id);
+
+-- Sales
+CREATE INDEX idx_sales_tenant ON sales(tenant_id);
+CREATE INDEX idx_sales_warehouse ON sales(warehouse_id);
+CREATE INDEX idx_sales_user ON sales(user_id);
+CREATE INDEX idx_sales_status ON sales(status);
+CREATE INDEX idx_sales_created ON sales(created_at);
+CREATE INDEX idx_sales_number ON sales(sale_number);
+CREATE INDEX idx_sales_payment_method ON sales(payment_method);
+
+-- Sale Items
+CREATE INDEX idx_sale_items_sale ON sale_items(sale_id);
+CREATE INDEX idx_sale_items_inventory ON sale_items(inventory_item_id);
+CREATE INDEX idx_sale_items_medicine ON sale_items(medicine_id);
 
 -- ============================================
 -- FUNCTIONS & TRIGGERS
@@ -333,6 +401,9 @@ CREATE TRIGGER update_warehouses_updated_at BEFORE UPDATE ON warehouses
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_inventory_items_updated_at BEFORE UPDATE ON inventory_items
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_sales_updated_at BEFORE UPDATE ON sales
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================

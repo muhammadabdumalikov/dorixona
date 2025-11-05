@@ -31,6 +31,7 @@ async function bootstrap() {
     )
     .addTag('auth', 'Authentication endpoints')
     .addTag('inventory', 'Inventory management')
+    .addTag('sales', 'Sales & POS')
     .addTag('medicines', 'Medicine catalog')
     .addTag('search', 'Medicine search')
     .addTag('alternatives', 'Medicine alternatives')

@@ -14,6 +14,7 @@ import { ManufacturersModule } from './manufacturers/manufacturers.module';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { SalesModule } from './sales/sales.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { InventoryModule } from './inventory/inventory.module';
     ScheduleModule.forRoot(),
     AuthModule,
     InventoryModule,
+    SalesModule,
     ImportModule,
     SearchModule,
     AlternativesModule,

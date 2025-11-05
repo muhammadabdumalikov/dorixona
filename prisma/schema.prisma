@@ -79,6 +79,7 @@ model Medicine {
   medicine_equivalence        MedicineEquivalence[]
   medicine_prices             MedicinePrice[]
   inventory_items             InventoryItem[]
+  sale_items                  SaleItem[]
   dosage_forms                DosageForm?                @relation(fields: [dosage_form_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "medicines_dosage_form_fkey")
   manufacturers               Manufacturer?              @relation(fields: [manufacturer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "medicines_manufacturer_fkey")
   user_searches               UserSearch[]
@@ -207,6 +208,7 @@ model Tenant {
   updated_at DateTime @updatedAt @db.Timestamp(6)
   users      User[]
   warehouses Warehouse[]
+  sales      Sale[]
 
   @@index([subdomain], map: "idx_tenants_subdomain")
   @@index([is_active], map: "idx_tenants_active")
@@ -226,6 +228,7 @@ model User {
   updated_at   DateTime @updatedAt @db.Timestamp(6)
   tenant       Tenant?  @relation(fields: [tenant_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   stock_movements StockMovement[]
+  sales        Sale[]
 
   @@index([email], map: "idx_users_email")
   @@index([tenant_id], map: "idx_users_tenant")
@@ -246,6 +249,7 @@ model Warehouse {
   tenant         Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   inventory_items InventoryItem[]
   stock_movements StockMovement[]
+  sales           Sale[]
 
   @@index([tenant_id], map: "idx_warehouses_tenant")
   @@index([is_active], map: "idx_warehouses_active")
@@ -270,6 +274,7 @@ model InventoryItem {
   medicine       Medicine @relation(fields: [medicine_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   warehouse      Warehouse @relation(fields: [warehouse_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   stock_movements StockMovement[]
+  sale_items     SaleItem[]
 
   @@unique([medicine_id, warehouse_id, batch_number])
   @@index([warehouse_id], map: "idx_inventory_items_warehouse")
@@ -309,5 +314,78 @@ model StockMovement {
   @@index([created_at], map: "idx_stock_movements_created")
   @@index([movement_type], map: "idx_stock_movements_type")
   @@index([created_by], map: "idx_stock_movements_created_by")
+  @@index([reference_type, reference_id], map: "idx_stock_movements_reference")
   @@map("stock_movements")
+}
+
+enum SaleStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+
+  @@map("sale_status")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  MOBILE_PAYMENT
+
+  @@map("payment_method")
+}
+
+model Sale {
+  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sale_number     String        @unique @db.VarChar(50)
+  warehouse_id    String        @db.Uuid
+  user_id        String        @db.Uuid
+  status         SaleStatus    @default(COMPLETED)
+  payment_method  PaymentMethod
+  total_amount    Decimal       @default(0) @db.Decimal(12, 2)
+  discount_amount Decimal       @default(0) @db.Decimal(12, 2)
+  tax_amount     Decimal       @default(0) @db.Decimal(12, 2)
+  final_amount   Decimal       @default(0) @db.Decimal(12, 2)
+  notes          String?
+  tenant_id      String        @db.Uuid
+  created_at     DateTime      @default(now()) @db.Timestamp(6)
+  updated_at     DateTime      @updatedAt @db.Timestamp(6)
+  warehouse      Warehouse     @relation(fields: [warehouse_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  user           User          @relation(fields: [user_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  tenant         Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sale_items     SaleItem[]
+
+  @@index([tenant_id], map: "idx_sales_tenant")
+  @@index([warehouse_id], map: "idx_sales_warehouse")
+  @@index([user_id], map: "idx_sales_user")
+  @@index([status], map: "idx_sales_status")
+  @@index([created_at], map: "idx_sales_created")
+  @@index([sale_number], map: "idx_sales_number")
+  @@index([payment_method], map: "idx_sales_payment_method")
+  @@map("sales")
+}
+
+model SaleItem {
+  id                String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sale_id           String        @db.Uuid
+  inventory_item_id String        @db.Uuid
+  medicine_id       String        @db.Uuid
+  quantity          Int
+  unit_price        Decimal       @db.Decimal(12, 2)
+  discount_percent  Decimal?      @default(0) @db.Decimal(5, 2)
+  discount_amount   Decimal?      @default(0) @db.Decimal(12, 2)
+  tax_percent       Decimal?      @default(0) @db.Decimal(5, 2)
+  tax_amount        Decimal?      @default(0) @db.Decimal(12, 2)
+  subtotal          Decimal       @db.Decimal(12, 2)
+  notes             String?
+  created_at        DateTime      @default(now()) @db.Timestamp(6)
+  sale              Sale          @relation(fields: [sale_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  inventory_item    InventoryItem @relation(fields: [inventory_item_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  medicine          Medicine      @relation(fields: [medicine_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([sale_id], map: "idx_sale_items_sale")
+  @@index([inventory_item_id], map: "idx_sale_items_inventory")
+  @@index([medicine_id], map: "idx_sale_items_medicine")
+  @@map("sale_items")
 }
